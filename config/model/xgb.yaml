@@ -1,0 +1,17 @@
+name: xgb
+is_balanced: False
+
+params:
+  booster: gbtree
+  gpu_id: 0
+  tree_method: gpu_hist
+  objective: binary:logistic
+  eval_metric: auc
+  learning_rate: 0.02
+  n_estimators: 1000
+  max_depth: 4
+  early_stopping_rounds: 50
+  subsample: 0.8
+  colsample_bytree: 0.5
+  alpha: 10
+  lambda: 10
