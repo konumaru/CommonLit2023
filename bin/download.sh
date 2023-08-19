@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -exo pipefail
+set -ex pipefail
 
 download_competition() {
     DIR_NAME=$1
@@ -20,7 +20,7 @@ download_competition() {
 
 download_dataset() {
     DATASET_NAME=$1
-    ARR=(${DATASET_NAME/\// })
+    ARR=${DATASET_NAME/\// }
     DIR_NAME=${ARR[1]}
 
     mkdir -p data/
