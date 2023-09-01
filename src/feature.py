@@ -13,6 +13,7 @@ def dummpy_feature() -> np.ndarray:
     data = np.zeros((5, 100))
     return data
 
+
 @hydra.main(
     config_path="../config", config_name="config.yaml", version_base="1.3"
 )
@@ -24,7 +25,6 @@ def main(cfg: DictConfig) -> None:
 
     for func in feat_funcs:
         func()
-
 
 
 if __name__ == "__main__":
