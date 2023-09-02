@@ -25,4 +25,4 @@ submit: # Submit the model to kaggle.
 	@echo "Submitting model..."
 	# $(MAKE) test
 	./bin/upload.sh
-	./bin/submit.sh
+	# ./bin/submit.sh # NOTE: Code requires competition.

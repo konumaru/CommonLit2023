@@ -15,18 +15,21 @@ todo:
   - target encodingもこれをつかう
 
 - feature engineering
-  - TODO: text feature
-    - feature list
-      - overlap word count
+  - feature list
+    - text_length
+    - word_count
+    - sentence_count
+    - quoted_sentence_count
+    - consecutive_dots_count
+    - TODO: overlap word count
+  - TODO: text embedding
+    - deberta v3
 - evaluation
   - 5 Fold
   - all oof
 - model
-  - text embedding
-    - deberta v3
-    - hogehgoe
-  - GBDT
-    - XGBoost
+  - Simgle Model
+    - TODO: XGBoost
     - LightGBM
     - NN
   - averag ensemble

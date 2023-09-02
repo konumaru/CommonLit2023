@@ -7,11 +7,7 @@ from typing import Any, Callable, List, Union
 import numpy as np
 
 
-def feature(
-    save_dir: str,
-    use_cache: bool = True,
-    is_saved: bool = True,
-) -> Callable:
+def feature(save_dir: str, use_cache: bool = True) -> Callable:
     def wrapper(func: Callable) -> Callable:
         @functools.wraps(func)
         def run_func(*args, **kwargs) -> Any:
@@ -28,9 +24,8 @@ def feature(
             result = func(*args, **kwargs)
 
             assert result.ndim == 2, "Feature dim must be 2d."
-            if is_saved:
-                with open(filepath, "wb") as file:
-                    pickle.dump(result, file)
+            with open(filepath, "wb") as file:
+                pickle.dump(result, file)
 
             return result
 

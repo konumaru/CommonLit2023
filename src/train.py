@@ -13,11 +13,12 @@ from utils.io import load_pickle, save_pickle
 
 
 def get_model(model_name: str = "rf", seed: int = 42) -> Any:
-    return RandomForestRegressor()
+    return RandomForestRegressor(n_estimators=100, random_state=seed)
 
 
 def train(
     model_name: str,
+    fold: int,
     target_name: str,
     X_train: np.ndarray,
     y_train: np.ndarray,
@@ -26,9 +27,9 @@ def train(
     gruop_train: Union[np.ndarray, None] = None,
     gruop_valid: Union[np.ndarray, None] = None,
     seed=42,
-):
+) -> None:
     model_dir = pathlib.Path(
-        f"./data/model/{model_name}/seed={seed}/target={target_name}"
+        f"./data/model/{model_name}/{target_name}/seed={seed}/fold={fold}"
     )
     model_dir.mkdir(exist_ok=True, parents=True)
 
@@ -39,6 +40,7 @@ def train(
 
 def predict(
     model_name: str,
+    fold: int,
     target_name: str,
     X_valid: Union[np.ndarray, None] = None,
     y_valid: Union[np.ndarray, None] = None,
@@ -46,7 +48,7 @@ def predict(
     seed: int = 42,
 ) -> np.ndarray:
     model_dir = pathlib.Path(
-        f"./data/model/{model_name}/seed={seed}/target={target_name}"
+        f"./data/model/{model_name}/{target_name}/seed={seed}/fold={fold}"
     )
 
     pred = np.zeros_like(y_valid)
@@ -82,6 +84,7 @@ def main(cfg: DictConfig) -> None:
 
             train(
                 cfg.model.name,
+                fold,
                 target_name,
                 X_train,
                 y_train,
@@ -92,6 +95,7 @@ def main(cfg: DictConfig) -> None:
 
             pred = predict(
                 cfg.model.name,
+                fold,
                 target_name,
                 X_valid,
                 y_valid,
