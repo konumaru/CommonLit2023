@@ -21,7 +21,7 @@ todo:
       - word count
       - sentence count
       - unique word count
-      - most mode word count
+      - overlap word count
     - method
       - auto tokenizerで処理してからカウントするとよさそう
         - <https://www.kaggle.com/code/cody11null/tuned-debertav3-lgbm-autocorrect?scriptVersionId=140573530&cellId=9>
