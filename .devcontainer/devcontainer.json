@@ -63,6 +63,8 @@
     "python.linting.mypyEnabled": true,
     "python.linting.mypyPath": "/opt/conda/bin/mypy",
     "python.formatting.provider": "black",
+    "python.formatting.blackArgs": ["--line-length", "79"],
+    "python.formatting.provider": "none",
     "python.testing.cwd": "${workspaceFolder}",
     "jupyter.askForKernelRestart": false,
     "autoDocstring.docstringFormat": "google",

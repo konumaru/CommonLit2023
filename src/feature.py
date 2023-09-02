@@ -1,3 +1,4 @@
+import pathlib
 import re
 
 import hydra
@@ -9,6 +10,21 @@ from utils import timer
 from utils.feature import feature, load_feature
 
 FEATURE_DIR = "./data/feature"
+
+
+@feature(FEATURE_DIR)
+def fold(data: pd.DataFrame) -> np.ndarray:
+    return data["fold"].to_numpy().reshape(-1, 1)
+
+
+@feature(FEATURE_DIR)
+def content(data: pd.DataFrame) -> np.ndarray:
+    return data["content"].to_numpy().reshape(-1, 1)
+
+
+@feature(FEATURE_DIR)
+def wording(data: pd.DataFrame) -> np.ndarray:
+    return data["wording"].to_numpy().reshape(-1, 1)
 
 
 @feature(FEATURE_DIR)
@@ -42,16 +58,19 @@ def consecutive_dots_count(data: pd.DataFrame) -> np.ndarray:
 
 
 @hydra.main(
-    config_path="../config",
-    config_name="config.yaml",
-    version_base="1.3",
+    config_path="../config", config_name="config.yaml", version_base="1.3"
 )
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
-    train = pd.read_csv("./data/raw/summaries_train.csv")
+    input_dir = pathlib.Path("./data/preprocessing")
+
+    train = pd.read_csv(input_dir / "train.csv")
 
     funcs = [
+        fold,
+        content,
+        wording,
         text_length,
         word_count,
         sentence_count,

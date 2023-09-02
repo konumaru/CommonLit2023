@@ -8,6 +8,13 @@ n_splits: 5
 debug: False
 is_eval: True
 
+features:
+  - text_length
+  - word_count
+  - sentence_count
+  - quoted_sentence_count
+  - consecutive_dots_count
+
 defaults:
   - _self_
   - model: xgb
