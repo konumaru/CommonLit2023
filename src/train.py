@@ -5,6 +5,7 @@ import hydra
 import numpy as np
 from omegaconf import DictConfig, OmegaConf
 from sklearn.ensemble import RandomForestRegressor
+from xgboost import XGBRegressor
 
 from metric import mcrmse
 from utils import timer
@@ -13,11 +14,45 @@ from utils.io import load_pickle, save_pickle
 
 
 def get_model(model_name: str = "rf", seed: int = 42) -> Any:
-    return RandomForestRegressor(n_estimators=100, random_state=seed)
+    return
+
+
+def fit_rf(
+    params,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    save_filepath: str,
+    seed: int = 42,
+):
+    model = RandomForestRegressor(n_estimators=100, random_state=seed)
+    model.fit(X_train, y_train)
+    save_pickle(str(pathlib.Path(save_filepath) / "model.pkl"), model)
+    return model
+
+
+def fit_xgb(
+    params,
+    save_filepath: str,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_valid: Union[np.ndarray, None] = None,
+    y_valid: Union[np.ndarray, None] = None,
+    seed: int = 42,
+) -> XGBRegressor:
+    model = XGBRegressor(**params)
+    model.set_params(random_state=seed)
+    model.fit(
+        X_train,
+        y_train,
+        eval_set=[(X_train, y_train), (X_valid, y_valid)],
+        verbose=50,
+    )
+    model.save_model(save_filepath + ".json")
+    return model
 
 
 def train(
-    model_name: str,
+    cfg: DictConfig,
     fold: int,
     target_name: str,
     X_train: np.ndarray,
@@ -28,18 +63,27 @@ def train(
     gruop_valid: Union[np.ndarray, None] = None,
     seed=42,
 ) -> None:
+    model_name = cfg.model.name
     model_dir = pathlib.Path(
         f"./data/model/{model_name}/{target_name}/seed={seed}/fold={fold}"
     )
     model_dir.mkdir(exist_ok=True, parents=True)
 
-    model = get_model(model_name, seed)
-    model.fit(X_train, y_train)
-    save_pickle(str(model_dir / "model.pkl"), model)
+    if cfg.model.name == "rf":
+        fit_rf(cfg.model.params, X_train, y_train, str(model_dir / "model"))
+    elif cfg.model.name == "xgb":
+        fit_xgb(
+            cfg.model.params,
+            str(model_dir / "model"),
+            X_train,
+            y_train,
+            X_valid,
+            y_valid,
+        )
 
 
 def predict(
-    model_name: str,
+    cfg: DictConfig,
     fold: int,
     target_name: str,
     X_valid: Union[np.ndarray, None] = None,
@@ -47,13 +91,19 @@ def predict(
     gruop_valid: Union[np.ndarray, None] = None,
     seed: int = 42,
 ) -> np.ndarray:
+    model_name = cfg.model.name
     model_dir = pathlib.Path(
         f"./data/model/{model_name}/{target_name}/seed={seed}/fold={fold}"
     )
 
     pred = np.zeros_like(y_valid)
-    model = load_pickle(str(model_dir / "model.pkl"))
-    pred = model.predict(X_valid)
+    if cfg.model.name == "rf":
+        model = load_pickle(str(model_dir / "model.pkl"))
+        pred = model.predict(X_valid)
+    elif cfg.model.name == "xgb":
+        model = XGBRegressor()
+        model.load_model(model_dir / "model.json")
+        pred = model.predict(X_valid)
 
     return pred
 
@@ -83,7 +133,7 @@ def main(cfg: DictConfig) -> None:
             y_valid = target[folds == fold]
 
             train(
-                cfg.model.name,
+                cfg,
                 fold,
                 target_name,
                 X_train,
@@ -94,7 +144,7 @@ def main(cfg: DictConfig) -> None:
             )
 
             pred = predict(
-                cfg.model.name,
+                cfg,
                 fold,
                 target_name,
                 X_valid,

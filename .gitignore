@@ -138,6 +138,7 @@ data/.hydra/
 *.pth
 *.parquet
 *.npy
+*.json
 
 
 !data/upload/.gitkeep

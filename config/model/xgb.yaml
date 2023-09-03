@@ -5,13 +5,13 @@ params:
   booster: gbtree
   gpu_id: 0
   tree_method: gpu_hist
-  objective: binary:logistic
-  eval_metric: auc
+  objective: reg:squarederror
+  eval_metric: rmse
   learning_rate: 0.02
-  n_estimators: 1000
+  n_estimators: 500
   max_depth: 4
   early_stopping_rounds: 50
-  subsample: 0.8
-  colsample_bytree: 0.5
-  alpha: 10
-  lambda: 10
+  subsample: 0.9
+  colsample_bytree: 0.7
+  # alpha: 10
+  # lambda: 10

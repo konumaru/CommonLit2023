@@ -1,11 +1,16 @@
 import pathlib
 import re
+from typing import List, Union
 
 import hydra
 import numpy as np
 import pandas as pd
+import torch
 from omegaconf import DictConfig, OmegaConf
+from rich.progress import track
+from torch.utils.data import DataLoader
 
+from models import CommonLitDataset, Embedding
 from utils import timer
 from utils.feature import feature, load_feature
 
@@ -57,6 +62,27 @@ def consecutive_dots_count(data: pd.DataFrame) -> np.ndarray:
     return results.to_numpy().reshape(-1, 1)
 
 
+# TODO: GPUを使いやすくするためにpytorch-lightningを使う
+@feature(FEATURE_DIR)
+def deberta_embeddings(data: pd.DataFrame) -> np.ndarray:
+    base_model = "microsoft/deberta-v3-base"
+    dataset = CommonLitDataset(data)
+    dataloader = DataLoader(
+        dataset, batch_size=64, shuffle=False, num_workers=4
+    )
+    model = Embedding(base_model, 512)
+    model.to("cuda")
+
+    with torch.no_grad():
+        embeddings_batch = []
+        for batch in track(dataloader):
+            z = model(batch)
+            embeddings_batch.append(z.detach().cpu().numpy())
+        embeddings = np.concatenate(embeddings_batch, axis=0)
+
+    return embeddings
+
+
 @hydra.main(
     config_path="../config", config_name="config.yaml", version_base="1.3"
 )
@@ -76,6 +102,7 @@ def main(cfg: DictConfig) -> None:
         sentence_count,
         quoted_sentence_count,
         consecutive_dots_count,
+        deberta_embeddings,
     ]
 
     for func in funcs:
@@ -83,7 +110,7 @@ def main(cfg: DictConfig) -> None:
 
     feature_names = [func.__name__ for func in funcs]
     features = load_feature(FEATURE_DIR, feature_names)
-    print(pd.DataFrame(features, columns=feature_names).head())
+    print(pd.DataFrame(features).head())
 
 
 if __name__ == "__main__":

@@ -22,8 +22,9 @@ todo:
     - quoted_sentence_count
     - consecutive_dots_count
     - TODO: overlap word count
-  - TODO: text embedding
+  - text embedding
     - deberta v3
+  - cosine similarity of prompt & text embeddings
 - evaluation
   - 5 Fold
   - all oof
@@ -33,3 +34,11 @@ todo:
     - LightGBM
     - NN
   - averag ensemble
+
+## Experiments
+
+| EXP_ID | Local CV | Public LB | Note |
+| --- | :---: | :---: | :--- |
+| 1 | 0.6687954845101823 | 0.599 | rf with simple text feature |
+| 2 | 0.5148155805419965 | -- | add debertav3 embeddings |
+| 3 | 0.490352926944447 | -- | change model from rf to xgb |
