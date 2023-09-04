@@ -16,9 +16,9 @@
     - consec tive_dots count
     - word overlap count
     - TODO: quotes overlap count
-  - promtp title & promtp & text embedding
+  - promtp & text embedding
     - deberta v3
-  - cosine similarity of prompt & text embeddings
+  - TODO: cosine similarity of prompt & text embeddings
   - TODO: target encoding of content and wording
 - cv strategy
   - 5 Fold (promtp_idでGroupKFoldする？)
@@ -32,7 +32,7 @@
 ## Experiments
 
 | EXP_ID | Local CV | Public LB | Note |
-| --- | :---: | :---: | :--- |
+| :---: | :---: | :---: | :--- |
 | 1 | 0.6687954845101823 | 0.599 | rf with simple text feature |
 | 2 | 0.5148155805419965 | -- | add debertav3 text embeddings feature |
 | 3 | 0.4903529269444470 | 0.509 | change model from rf to xgb |

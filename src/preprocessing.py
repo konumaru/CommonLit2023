@@ -25,7 +25,9 @@ def main(cfg: DictConfig) -> None:
     cv = KFold(n_splits=cfg.n_splits, shuffle=True, random_state=42)
 
     train = train.assign(fold=0)
-    for fold, (_, valid_index) in enumerate(cv.split(train)):
+    for fold, (_, valid_index) in enumerate(
+        cv.split(train, groups=train["prompt_id"])
+    ):
         train.loc[valid_index, "fold"] = fold
 
     train.to_csv(output_dir / "train.csv", index=False)
