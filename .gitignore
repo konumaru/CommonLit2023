@@ -144,3 +144,6 @@ data/.hydra/
 !data/upload/.gitkeep
 !data/upload/dataset-metadata.json
 data/upload/*
+
+!data/external/.gitkeep
+data/external/*

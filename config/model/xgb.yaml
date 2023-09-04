@@ -8,10 +8,8 @@ params:
   objective: reg:squarederror
   eval_metric: rmse
   learning_rate: 0.02
-  n_estimators: 500
+  n_estimators: 800
   max_depth: 4
   early_stopping_rounds: 50
   subsample: 0.9
   colsample_bytree: 0.7
-  # alpha: 10
-  # lambda: 10

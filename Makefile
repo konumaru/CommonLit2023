@@ -13,16 +13,16 @@ tests: # Run tests
 .PHONY: init
 init: # Download the data and initialize the project.
 	@echo "Downloading data..."
-	./bin/download.sh
+	bash ./bin/download.sh
 
 .PHONY: train
 train: # Train the model
 	@echo "Training model..."
-	./bin/train.sh
+	bash ./bin/train.sh
 
 .PHONY: submit
 submit: # Submit the model to kaggle.
 	@echo "Submitting model..."
 	# $(MAKE) test
-	./bin/upload.sh
+	bash ./bin/upload.sh
 	# ./bin/submit.sh # NOTE: Code requires competition.

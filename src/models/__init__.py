@@ -1,5 +1,5 @@
 import pathlib
-from typing import Dict
+from typing import Dict, List
 
 import pandas as pd
 import torch
@@ -11,21 +11,21 @@ from transformers import AutoModel, AutoTokenizer
 class CommonLitDataset(Dataset):
     def __init__(
         self,
-        data: pd.DataFrame,
+        input_texts: List[str],
         model_name: str,
         max_len: int = 256,
     ) -> None:
-        self.data = data
+        self.input_texts = input_texts
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.max_len = max_len
 
     def __len__(self) -> int:
-        return len(self.data)
+        return len(self.input_texts)
 
     def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
-        row = self.data.iloc[index]
+        text = self.input_texts[index]
         encoded_token = self.tokenizer(
-            row["text"],
+            text,
             padding="max_length",
             max_length=self.max_len,
             truncation=True,
@@ -84,7 +84,7 @@ def main() -> None:
 
     model_name = "bert-base-uncased"
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    dataset = CommonLitDataset(train, model_name, 256)
+    dataset = CommonLitDataset(train["text"].tolist(), model_name, 256)
     dataloader = DataLoader(dataset, batch_size=8, shuffle=False)
     model = EmbeddingEncoder(model_name, device=device)
     model.to(device)

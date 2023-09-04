@@ -20,8 +20,8 @@ download_competition() {
 
 download_dataset() {
     DATASET_NAME=$1
-    ARR=${DATASET_NAME/\// }
-    DIR_NAME=${ARR[1]}
+    IFS='/' read -ra ARR <<< "$DATASET_NAME"
+    DIR_NAME="${ARR[1]}"
 
     mkdir -p data/
     mkdir -p data/external
@@ -40,4 +40,4 @@ download_dataset() {
 download_competition commonlit-evaluate-student-summaries
 
 # Download datasets.
-# download_dataset cdeotte/census-data-for-godaddy
+download_dataset konumaru/microsoft-deberta-v3-base

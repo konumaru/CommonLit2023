@@ -6,6 +6,7 @@ import hydra
 import numpy as np
 import pandas as pd
 import torch
+from nltk.corpus import stopwords
 from omegaconf import DictConfig, OmegaConf
 from rich.progress import track
 from torch.utils.data import DataLoader
@@ -62,10 +63,52 @@ def consecutive_dots_count(data: pd.DataFrame) -> np.ndarray:
     return results.to_numpy().reshape(-1, 1)
 
 
+def word_overlap_counter(row) -> int:
+    STOP_WORDS = set(stopwords.words("english"))  # type: ignore
+
+    def check_is_stop_word(word):
+        return word in STOP_WORDS
+
+    prompt_words = row["prompt_text"]
+    summary_words = row["text"]
+    if STOP_WORDS:
+        prompt_words = list(filter(check_is_stop_word, prompt_words))
+        summary_words = list(filter(check_is_stop_word, summary_words))
+    return len(set(prompt_words).intersection(set(summary_words)))
+
+
+def ngram_co_occurrence_counter(row, n: int = 2) -> int:
+    def ngrams(token, n):
+        ngrams = zip(*[token[i:] for i in range(n)])
+        return [" ".join(ngram) for ngram in ngrams]
+
+    original_tokens = row["prompt_text"].split(" ")
+    summary_tokens = row["text"].split(" ")
+
+    original_ngrams = set(ngrams(original_tokens, n))
+    summary_ngrams = set(ngrams(summary_tokens, n))
+
+    common_ngrams = original_ngrams.intersection(summary_ngrams)
+    return len(common_ngrams)
+
+
 @feature(FEATURE_DIR)
-def deberta_embeddings(data: pd.DataFrame) -> np.ndarray:
-    model_name = "microsoft/deberta-v3-base"
-    dataset = CommonLitDataset(data, model_name, max_len=512)
+def word_overlap_count(data: pd.DataFrame) -> np.ndarray:
+    results = data.apply(word_overlap_counter, axis=1)
+    return results.to_numpy().reshape(-1, 1)
+
+
+@feature(FEATURE_DIR)
+def ngram_co_occurrence_count(data: pd.DataFrame) -> np.ndarray:
+    bi_gram = data.apply(ngram_co_occurrence_counter, axis=1, args=(2,))
+    tr_gram = data.apply(ngram_co_occurrence_counter, axis=1, args=(3,))
+
+    results = pd.concat([bi_gram, tr_gram], axis=1)
+    return results.to_numpy()
+
+
+def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
+    dataset = CommonLitDataset(input_texts, model_name, max_len=512)
     dataloader = DataLoader(
         dataset, batch_size=64, shuffle=False, num_workers=8
     )
@@ -85,6 +128,44 @@ def deberta_embeddings(data: pd.DataFrame) -> np.ndarray:
     return embeddings
 
 
+@feature(FEATURE_DIR)
+def deberta_text_embeddings(data: pd.DataFrame) -> np.ndarray:
+    model_name = "microsoft/deberta-v3-base"
+    embeddings = encode_embedding(model_name, data["text"].tolist())
+    return embeddings
+
+
+@feature(FEATURE_DIR)
+def deberta_prompt_embeddings(data: pd.DataFrame) -> np.ndarray:
+    model_name = "microsoft/deberta-v3-base"
+    embeddings = encode_embedding(model_name, data["prompt_text"].tolist())
+    return embeddings
+
+
+def create_features(data: pd.DataFrame):
+    funcs = [
+        fold,
+        content,
+        wording,
+        text_length,
+        word_count,
+        sentence_count,
+        quoted_sentence_count,
+        consecutive_dots_count,
+        word_overlap_count,
+        ngram_co_occurrence_count,
+        deberta_text_embeddings,
+        deberta_prompt_embeddings,
+    ]
+
+    for func in funcs:
+        func(data)
+
+    feature_names = [func.__name__ for func in funcs]
+    features = load_feature(FEATURE_DIR, feature_names)
+    return features
+
+
 @hydra.main(
     config_path="../config", config_name="config.yaml", version_base="1.3"
 )
@@ -95,23 +176,7 @@ def main(cfg: DictConfig) -> None:
 
     train = pd.read_csv(input_dir / "train.csv")
 
-    funcs = [
-        fold,
-        content,
-        wording,
-        text_length,
-        word_count,
-        sentence_count,
-        quoted_sentence_count,
-        consecutive_dots_count,
-        deberta_embeddings,
-    ]
-
-    for func in funcs:
-        func(train)
-
-    feature_names = [func.__name__ for func in funcs]
-    features = load_feature(FEATURE_DIR, feature_names)
+    features = create_features(train)
     print(pd.DataFrame(features).head())
 
 

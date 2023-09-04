@@ -22,7 +22,9 @@ def fit_rf(
 ) -> RandomForestRegressor:
     model = RandomForestRegressor(n_estimators=100, random_state=seed)
     model.fit(X_train, y_train)
-    save_pickle(str(pathlib.Path(save_filepath) / "model.pkl"), model)
+    save_pickle(
+        str(pathlib.Path(save_filepath) / f"{save_filepath}.pkl"), model
+    )
     return model
 
 
@@ -64,14 +66,13 @@ def train(cfg: DictConfig) -> None:
         target = load_pickle(features_dir / f"{target_name}.pkl").ravel()
         targets[:, i] = target
         for fold in range(cfg.n_splits):
-            print(f"fold={fold}")
             print(f"Fold: {fold}")
             X_train = features[folds != fold]
             y_train = target[folds != fold]
             X_valid = features[folds == fold]
             y_valid = target[folds == fold]
 
-            saved_filename = f"target={target_name}_fold={fold}.pkl"
+            saved_filename = f"target={target_name}_fold={fold}"
             if cfg.model.name == "rf":
                 model = fit_rf(
                     cfg.model.params,

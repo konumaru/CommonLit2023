@@ -16,7 +16,12 @@ def main(cfg: DictConfig) -> None:
 
     output_dir = pathlib.Path("./data/preprocessing")
 
-    train = pd.read_csv("./data/raw/summaries_train.csv")
+    summaries_train = pd.read_csv("./data/raw/summaries_train.csv")
+    prompts_train = pd.read_csv("./data/raw/prompts_train.csv")
+
+    train = pd.merge(
+        prompts_train, summaries_train, on="prompt_id", how="right"
+    )
     cv = KFold(n_splits=cfg.n_splits, shuffle=True, random_state=42)
 
     train = train.assign(fold=0)

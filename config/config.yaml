@@ -19,7 +19,10 @@ features:
   - sentence_count
   - quoted_sentence_count
   - consecutive_dots_count
-  - deberta_embeddings
+  - word_overlap_count
+  - ngram_co_occurrence_count
+  - deberta_text_embeddings
+  - deberta_prompt_embeddings
 
 defaults:
   - _self_
