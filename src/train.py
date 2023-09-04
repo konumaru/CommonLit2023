@@ -1,5 +1,5 @@
 import pathlib
-from typing import Any, Union
+from typing import Union
 
 import hydra
 import numpy as np
@@ -13,17 +13,13 @@ from utils.feature import load_feature
 from utils.io import load_pickle, save_pickle
 
 
-def get_model(model_name: str = "rf", seed: int = 42) -> Any:
-    return
-
-
 def fit_rf(
     params,
     X_train: np.ndarray,
     y_train: np.ndarray,
     save_filepath: str,
     seed: int = 42,
-):
+) -> RandomForestRegressor:
     model = RandomForestRegressor(n_estimators=100, random_state=seed)
     model.fit(X_train, y_train)
     save_pickle(str(pathlib.Path(save_filepath) / "model.pkl"), model)
@@ -51,61 +47,67 @@ def fit_xgb(
     return model
 
 
-def train(
-    cfg: DictConfig,
-    fold: int,
-    target_name: str,
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    X_valid: Union[np.ndarray, None] = None,
-    y_valid: Union[np.ndarray, None] = None,
-    gruop_train: Union[np.ndarray, None] = None,
-    gruop_valid: Union[np.ndarray, None] = None,
-    seed=42,
-) -> None:
-    model_name = cfg.model.name
-    model_dir = pathlib.Path(
-        f"./data/model/{model_name}/{target_name}/seed={seed}/fold={fold}"
-    )
+def train(cfg: DictConfig) -> None:
+    features_dir = pathlib.Path(cfg.path.features)
+
+    features = load_feature(features_dir, cfg.features)
+    folds = load_pickle(features_dir / "fold.pkl").ravel()
+    oof = np.zeros(shape=(len(features), 2))
+    targets = oof.copy()
+
+    model_dir_suffix = f"{cfg.model.name}/seed={cfg.seed}/"
+    model_dir = pathlib.Path(cfg.path.model) / model_dir_suffix
     model_dir.mkdir(exist_ok=True, parents=True)
 
-    if cfg.model.name == "rf":
-        fit_rf(cfg.model.params, X_train, y_train, str(model_dir / "model"))
-    elif cfg.model.name == "xgb":
-        fit_xgb(
-            cfg.model.params,
-            str(model_dir / "model"),
-            X_train,
-            y_train,
-            X_valid,
-            y_valid,
-        )
+    for i, target_name in enumerate(["content", "wording"]):
+        print("Target:", target_name)
+        target = load_pickle(features_dir / f"{target_name}.pkl").ravel()
+        targets[:, i] = target
+        for fold in range(cfg.n_splits):
+            print(f"fold={fold}")
+            print(f"Fold: {fold}")
+            X_train = features[folds != fold]
+            y_train = target[folds != fold]
+            X_valid = features[folds == fold]
+            y_valid = target[folds == fold]
+
+            saved_filename = f"target={target_name}_fold={fold}.pkl"
+            if cfg.model.name == "rf":
+                model = fit_rf(
+                    cfg.model.params,
+                    X_train,
+                    y_train,
+                    str(model_dir / saved_filename),
+                )
+                oof[folds == fold, i] = model.predict(X_valid)
+            elif cfg.model.name == "xgb":
+                model = fit_xgb(
+                    cfg.model.params,
+                    str(model_dir / saved_filename),
+                    X_train,
+                    y_train,
+                    X_valid,
+                    y_valid,
+                )
+                oof[folds == fold, i] = model.predict(X_valid)
+
+    output_dir = pathlib.Path(cfg.path.train)
+    save_pickle(str(output_dir / "oof.pkl"), oof)
 
 
-def predict(
-    cfg: DictConfig,
-    fold: int,
-    target_name: str,
-    X_valid: Union[np.ndarray, None] = None,
-    y_valid: Union[np.ndarray, None] = None,
-    gruop_valid: Union[np.ndarray, None] = None,
-    seed: int = 42,
-) -> np.ndarray:
-    model_name = cfg.model.name
-    model_dir = pathlib.Path(
-        f"./data/model/{model_name}/{target_name}/seed={seed}/fold={fold}"
-    )
+def evaluate(cfg: DictConfig) -> None:
+    features_dir = pathlib.Path(cfg.path.features)
+    train_output_dir = pathlib.Path(cfg.path.train)
 
-    pred = np.zeros_like(y_valid)
-    if cfg.model.name == "rf":
-        model = load_pickle(str(model_dir / "model.pkl"))
-        pred = model.predict(X_valid)
-    elif cfg.model.name == "xgb":
-        model = XGBRegressor()
-        model.load_model(model_dir / "model.json")
-        pred = model.predict(X_valid)
+    oof = load_pickle(str(train_output_dir / "oof.pkl"))
 
-    return pred
+    targets = np.zeros_like(oof)
+    for i, target_name in enumerate(["content", "wording"]):
+        target = load_pickle(features_dir / f"{target_name}.pkl").ravel()
+        targets[:, i] = target
+
+    score = mcrmse(targets, oof)
+    print(score)
 
 
 @hydra.main(
@@ -114,47 +116,8 @@ def predict(
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
-    input_dir = pathlib.Path("./data/feature")
-
-    folds = load_pickle(input_dir / "fold.pkl").ravel()
-    featres = load_feature(input_dir, cfg.features)
-
-    oof = np.zeros(shape=(len(folds), 2))
-    targets = oof.copy()
-    for i, target_name in enumerate(["content", "wording"]):
-        print("Target:", target_name)
-        target = load_pickle(input_dir / f"{target_name}.pkl").ravel()
-        targets[:, i] = target
-        for fold in range(cfg.n_splits):
-            print(f"Fold: {fold}")
-            X_train = featres[folds != fold]
-            y_train = target[folds != fold]
-            X_valid = featres[folds == fold]
-            y_valid = target[folds == fold]
-
-            train(
-                cfg,
-                fold,
-                target_name,
-                X_train,
-                y_train,
-                X_valid,
-                y_valid,
-                seed=cfg.seed,
-            )
-
-            pred = predict(
-                cfg,
-                fold,
-                target_name,
-                X_valid,
-                y_valid,
-                seed=cfg.seed,
-            )
-            oof[folds == fold, i] = pred
-
-    score = mcrmse(targets, oof)
-    print(score)
+    train(cfg)
+    evaluate(cfg)
 
 
 if __name__ == "__main__":

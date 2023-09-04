@@ -30,9 +30,9 @@ todo:
   - all oof
 - model
   - Simgle Model
-    - TODO: XGBoost
-    - LightGBM
-    - NN
+    - XGBoost
+    - TODO: LightGBM
+    - TODO: NN
   - averag ensemble
 
 ## Experiments

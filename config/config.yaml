@@ -8,6 +8,11 @@ n_splits: 5
 debug: False
 is_eval: True
 
+path:
+  features: ./data/feature
+  model: ./data/model
+  train: ./data/train
+
 features:
   - text_length
   - word_count

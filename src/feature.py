@@ -1,6 +1,6 @@
 import pathlib
 import re
-from typing import List, Union
+from typing import List
 
 import hydra
 import numpy as np
@@ -10,7 +10,7 @@ from omegaconf import DictConfig, OmegaConf
 from rich.progress import track
 from torch.utils.data import DataLoader
 
-from models import CommonLitDataset, Embedding
+from models import CommonLitDataset, EmbeddingEncoder
 from utils import timer
 from utils.feature import feature, load_feature
 
@@ -62,17 +62,19 @@ def consecutive_dots_count(data: pd.DataFrame) -> np.ndarray:
     return results.to_numpy().reshape(-1, 1)
 
 
-# TODO: GPUを使いやすくするためにpytorch-lightningを使う
 @feature(FEATURE_DIR)
 def deberta_embeddings(data: pd.DataFrame) -> np.ndarray:
-    base_model = "microsoft/deberta-v3-base"
-    dataset = CommonLitDataset(data)
+    model_name = "microsoft/deberta-v3-base"
+    dataset = CommonLitDataset(data, model_name, max_len=512)
     dataloader = DataLoader(
-        dataset, batch_size=64, shuffle=False, num_workers=4
+        dataset, batch_size=64, shuffle=False, num_workers=8
     )
-    model = Embedding(base_model, 512)
-    model.to("cuda")
 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    model = EmbeddingEncoder(model_name, device=device)
+
+    model.to(device)
+    model.eval()
     with torch.no_grad():
         embeddings_batch = []
         for batch in track(dataloader):
