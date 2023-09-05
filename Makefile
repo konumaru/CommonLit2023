@@ -26,3 +26,4 @@ submit: # Submit the model to kaggle.
 	# $(MAKE) test
 	bash ./bin/upload.sh
 	# ./bin/submit.sh # NOTE: Code requires competition.
+	python src/submit.py

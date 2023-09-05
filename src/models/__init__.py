@@ -55,6 +55,9 @@ class EmbeddingEncoder(nn.Module):
         self.pooling = pooling
         self.device = device
 
+        for param in self.model.parameters():
+            param.requires_grad = False
+
     def forward(self, x: Dict[str, torch.Tensor]) -> torch.Tensor:
         x = {k: v.to(self.device) for k, v in x.items()}
 

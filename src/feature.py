@@ -63,7 +63,24 @@ def consecutive_dots_count(data: pd.DataFrame) -> np.ndarray:
     return results.to_numpy().reshape(-1, 1)
 
 
-def word_overlap_counter(row) -> int:
+def quotes_counter(row: pd.Series):
+    summary = row["text"]
+    text = row["prompt_text"]
+
+    quotes_from_summary = re.findall(r'"([^"]*)"', summary)
+    if len(quotes_from_summary) > 0:
+        return [quote in text for quote in quotes_from_summary].count(True)
+    else:
+        return 0
+
+
+@feature(FEATURE_DIR)
+def quotes_count(data: pd.DataFrame) -> np.ndarray:
+    results = data.apply(quotes_counter, axis=1)
+    return results.to_numpy().reshape(-1, 1)
+
+
+def word_overlap_counter(row: pd.Series) -> int:
     STOP_WORDS = set(stopwords.words("english"))  # type: ignore
 
     def check_is_stop_word(word):
@@ -77,7 +94,7 @@ def word_overlap_counter(row) -> int:
     return len(set(prompt_words).intersection(set(summary_words)))
 
 
-def ngram_co_occurrence_counter(row, n: int = 2) -> int:
+def ngram_co_occurrence_counter(row: pd.Series, n: int = 2) -> int:
     def ngrams(token, n):
         ngrams = zip(*[token[i:] for i in range(n)])
         return [" ".join(ngram) for ngram in ngrams]
@@ -128,7 +145,7 @@ def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
     return embeddings
 
 
-@feature(FEATURE_DIR)
+@feature(FEATURE_DIR, False)
 def deberta_text_embeddings(data: pd.DataFrame) -> np.ndarray:
     model_name = "microsoft/deberta-v3-base"
     embeddings = encode_embedding(model_name, data["text"].tolist())
@@ -152,6 +169,7 @@ def create_features(data: pd.DataFrame):
         sentence_count,
         quoted_sentence_count,
         consecutive_dots_count,
+        # quotes_count,
         word_overlap_count,
         ngram_co_occurrence_count,
         deberta_text_embeddings,
