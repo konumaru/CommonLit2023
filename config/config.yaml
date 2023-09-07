@@ -4,7 +4,7 @@ hydra:
   output_subdir: null
 
 seed: 42
-n_splits: 5
+n_splits: 4
 debug: False
 is_eval: True
 
@@ -19,7 +19,9 @@ features:
   - sentence_count
   - quoted_sentence_count
   - consecutive_dots_count
+  - quotes_count
   - word_overlap_count
+  - spell_miss_count
   - ngram_co_occurrence_count
   - deberta_text_embeddings
   # - deberta_prompt_embeddings

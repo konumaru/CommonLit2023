@@ -3,7 +3,7 @@ import pathlib
 import hydra
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
-from sklearn.model_selection import KFold
+from sklearn.model_selection import GroupKFold, KFold
 
 from utils import timer
 
@@ -22,7 +22,8 @@ def main(cfg: DictConfig) -> None:
     train = pd.merge(
         prompts_train, summaries_train, on="prompt_id", how="right"
     )
-    cv = KFold(n_splits=cfg.n_splits, shuffle=True, random_state=42)
+    # cv = KFold(n_splits=cfg.n_splits, shuffle=True, random_state=42)
+    cv = GroupKFold(n_splits=cfg.n_splits)
 
     train = train.assign(fold=0)
     for fold, (_, valid_index) in enumerate(

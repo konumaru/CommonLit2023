@@ -9,6 +9,7 @@ import torch
 from nltk.corpus import stopwords
 from omegaconf import DictConfig, OmegaConf
 from rich.progress import track
+from spellchecker import SpellChecker
 from torch.utils.data import DataLoader
 
 from models import CommonLitDataset, EmbeddingEncoder
@@ -124,6 +125,16 @@ def ngram_co_occurrence_count(data: pd.DataFrame) -> np.ndarray:
     return results.to_numpy()
 
 
+@feature(FEATURE_DIR)
+def spell_miss_count(data: pd.DataFrame) -> np.ndarray:
+    def counter(row: pd.Series) -> int:
+        words = row["text"].split(" ")
+        return len(SpellChecker().unknown(words))
+
+    results = data.apply(counter, axis=1).to_numpy()
+    return results.reshape(-1, 1)
+
+
 def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
     dataset = CommonLitDataset(input_texts, model_name, max_len=512)
     dataloader = DataLoader(
@@ -145,7 +156,7 @@ def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
     return embeddings
 
 
-@feature(FEATURE_DIR, False)
+@feature(FEATURE_DIR)
 def deberta_text_embeddings(data: pd.DataFrame) -> np.ndarray:
     model_name = "microsoft/deberta-v3-base"
     embeddings = encode_embedding(model_name, data["text"].tolist())
@@ -169,9 +180,10 @@ def create_features(data: pd.DataFrame):
         sentence_count,
         quoted_sentence_count,
         consecutive_dots_count,
-        # quotes_count,
+        quotes_count,
         word_overlap_count,
         ngram_co_occurrence_count,
+        spell_miss_count,
         deberta_text_embeddings,
         deberta_prompt_embeddings,
     ]

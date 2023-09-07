@@ -15,17 +15,20 @@
     - quoted sentence count
     - consec tive_dots count
     - word overlap count
+    - spell miss count, SpellChecker
   - text embedding
     - deberta v3
-  - TODO: cosine similarity of prompt & text embeddings
   - TODO: target encoding of content and wording
+    - count系の特徴量を使う？
 - cv strategy
   - 5 Fold
+  - TODO: コンペの条件的にはGropuKFoldが適切
 - model
   - Simgle Model
     - XGBoost
     - TODO: LightGBM
-    - TODO: NN
+    - TODO: fine tuned deberta v3
+      - inputs: text, spell_miss_count
   - averag ensemble
 
 ## Experiments
@@ -39,8 +42,17 @@
 | 5 | 0.4785185756657641 | -- | add feature of overlap word and co-occur words |
 | 6 | 0.4759433370779221 | -- | add feature of tri-gram co-occur words |
 | 7 | 0.4737618975123431 | -- | change xgb n_estimatoers param 500 to 800 |
-| 8 | 0.4744999729694380 | 0.497 | rm featrue of debertav3 prompt embeddings |
+| 8 | 0.4744999729694380 | 0.479 | rm featrue of debertav3 prompt embeddings |
+| 9 | 0.5576348008005831 | 0.478 | change kfold to group kfold |
+| 10 | 0.5572727558437666 |  | add feature of spell_miss_count |
+| 11 | 0.5560561772865491 | 0.479 | add feature of quotes_count |
+| 12 |  |  | fine tuning deberta mdoel |
 
 ## EDA
 
 - TODO: promptとtext間のスペルミスにどのようなものがあるか見てみる
+
+## TODO
+
+- bebertaのfine tuningする
+- テキストの特徴量を増やす

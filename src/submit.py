@@ -7,6 +7,7 @@ import pandas as pd
 import torch
 from nltk.corpus import stopwords
 from rich.progress import track
+from spellchecker import SpellChecker
 from torch.utils.data import DataLoader
 from xgboost import XGBRegressor
 
@@ -36,6 +37,22 @@ def quoted_sentence_count(data: pd.DataFrame) -> np.ndarray:
 
 def consecutive_dots_count(data: pd.DataFrame) -> np.ndarray:
     results = data["text"].apply(lambda x: len(re.findall(r"\.{3,4}", str(x))))
+    return results.to_numpy().reshape(-1, 1)
+
+
+def quotes_counter(row: pd.Series):
+    summary = row["text"]
+    text = row["prompt_text"]
+
+    quotes_from_summary = re.findall(r'"([^"]*)"', summary)
+    if len(quotes_from_summary) > 0:
+        return [quote in text for quote in quotes_from_summary].count(True)
+    else:
+        return 0
+
+
+def quotes_count(data: pd.DataFrame) -> np.ndarray:
+    results = data.apply(quotes_counter, axis=1)
     return results.to_numpy().reshape(-1, 1)
 
 
@@ -81,6 +98,15 @@ def ngram_co_occurrence_count(data: pd.DataFrame) -> np.ndarray:
     return results.to_numpy()
 
 
+def spell_miss_count(data: pd.DataFrame) -> np.ndarray:
+    def counter(row: pd.Series) -> int:
+        words = row["text"].split(" ")
+        return len(SpellChecker().unknown(words))
+
+    results = data.apply(counter, axis=1).to_numpy()
+    return results.reshape(-1, 1)
+
+
 def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
     dataset = CommonLitDataset(input_texts, model_name, max_len=512)
     dataloader = DataLoader(
@@ -121,7 +147,9 @@ def create_features(data: pd.DataFrame):
         sentence_count,
         quoted_sentence_count,
         consecutive_dots_count,
+        quotes_count,
         word_overlap_count,
+        spell_miss_count,
         ngram_co_occurrence_count,
         deberta_text_embeddings,
     ]
@@ -141,7 +169,7 @@ def predict(X: np.ndarray, models: List[Any]) -> np.ndarray:
 
 
 def main() -> None:
-    N_FOLD = 5
+    N_FOLD = 4
     raw_dir = pathlib.Path("./data/raw")
     input_dir = pathlib.Path("./data/upload")
 
