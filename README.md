@@ -46,7 +46,7 @@
 | 9 | 0.5576348008005831 | 0.478 | change kfold to group kfold |
 | 10 | 0.5572727558437666 |  | add feature of spell_miss_count |
 | 11 | 0.5560561772865491 | 0.479 | add feature of quotes_count |
-| 12 |  |  | fine tuning deberta mdoel |
+| 13 |  |  | fine tuning deberta mdoel |
 
 ## EDA
 

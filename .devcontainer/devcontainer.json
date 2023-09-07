@@ -1,25 +1,9 @@
 {
-  "dockerComposeFile": ["../docker-compose.yml"],
-  "extensions": [
-    "ms-python.python",
-    "ms-python.vscode-pylance",
-    "ms-python.black-formatter",
-    "ms-toolsai.jupyter-keymap",
-    "ms-vscode.makefile-tools",
-    "ms-python.isort",
-    "ms-toolsai.jupyter",
-    "dbaeumer.vscode-eslint",
-    "christian-kohler.path-intellisense",
-    "DavidAnson.vscode-markdownlint",
-    "vscodevim.vim",
-    "njpwerner.autodocstring",
-    "esbenp.prettier-vscode",
-    "yzhang.markdown-all-in-one",
-    "usernamehw.errorlens",
-    "GitHub.copilot"
-  ],
   "name": "kaggle-container",
   "service": "kaggle_env",
+  "dockerComposeFile": ["../docker-compose.yml"],
+  "shutdownAction": "stopCompose",
+  "workspaceFolder": "/workspace",
   "settings": {
     // Makefile
     "[makefile]": {
@@ -38,8 +22,6 @@
       }
     ],
     // Python
-    "python.analysis.inlayHints.variableTypes": true,
-    "python.analysis.inlayHints.functionReturnTypes": true,
     "[python]": {
       "editor.tabSize": 4,
       "editor.insertSpaces": true,
@@ -48,30 +30,48 @@
       "editor.codeActionsOnSave": {
         "source.organizeImports": true
       },
-      "editor.formatOnType": true
+      "editor.formatOnType": true,
+      "black-formatter.args": ["--line-length=79"],
+      "isort.path": ["/opt/conda/bin/isort"],
+      "isort.args": ["--profile", "black"],
+      "autoDocstring.docstringFormat": "google",
+      "jupyter.askForKernelRestart": false
     },
     "python.defaultInterpreterPath": "/opt/conda/bin/python",
     "python.languageServer": "Pylance",
+    "python.analysis.extraPaths": ["./src"],
+    "python.analysis.inlayHints.variableTypes": true,
+    "python.analysis.inlayHints.functionReturnTypes": true,
     "python.analysis.typeCheckingMode": "basic",
     "python.analysis.completeFunctionParens": true,
     "python.analysis.diagnosticMode": "workspace",
     "python.linting.enabled": true,
-    "python.linting.cwd": "${workspaceFolder}",
     "python.linting.pylintEnabled": false,
     "python.linting.flake8Enabled": true,
+    "python.linting.cwd": "${workspaceFolder}",
     "python.linting.flake8Path": "/opt/conda/bin/pflake8",
+    "python.linting.flake8Args": ["--max-line-length=79"],
     "python.linting.mypyEnabled": true,
     "python.linting.mypyPath": "/opt/conda/bin/mypy",
-    "python.formatting.provider": "black",
     "python.formatting.blackArgs": ["--line-length", "79"],
-    "python.formatting.provider": "none",
-    "python.testing.cwd": "${workspaceFolder}",
-    "jupyter.askForKernelRestart": false,
-    "autoDocstring.docstringFormat": "google",
-    "isort.path": ["/opt/conda/bin/isort"],
-    "black-formatter.args": ["--line-length=79"],
-    "python.linting.flake8Args": ["--max-line-length=79"]
+    "python.testing.cwd": "${workspaceFolder}"
   },
-  "shutdownAction": "stopCompose",
-  "workspaceFolder": "/workspace"
+  "extensions": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.black-formatter",
+    "ms-toolsai.jupyter-keymap",
+    "ms-vscode.makefile-tools",
+    "ms-python.isort",
+    "ms-toolsai.jupyter",
+    "dbaeumer.vscode-eslint",
+    "christian-kohler.path-intellisense",
+    "DavidAnson.vscode-markdownlint",
+    "vscodevim.vim",
+    "njpwerner.autodocstring",
+    "esbenp.prettier-vscode",
+    "yzhang.markdown-all-in-one",
+    "usernamehw.errorlens",
+    "GitHub.copilot"
+  ]
 }

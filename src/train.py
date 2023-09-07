@@ -22,9 +22,7 @@ def fit_rf(
 ) -> RandomForestRegressor:
     model = RandomForestRegressor(n_estimators=100, random_state=seed)
     model.fit(X_train, y_train)
-    save_pickle(
-        str(pathlib.Path(save_filepath) / f"{save_filepath}.pkl"), model
-    )
+    save_pickle(str(pathlib.Path(save_filepath) / f"{save_filepath}.pkl"), model)
     return model
 
 
@@ -111,9 +109,7 @@ def evaluate(cfg: DictConfig) -> None:
     print(score)
 
 
-@hydra.main(
-    config_path="../config", config_name="config.yaml", version_base="1.3"
-)
+@hydra.main(config_path="../config", config_name="config.yaml", version_base="1.3")
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 

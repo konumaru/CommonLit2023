@@ -40,4 +40,5 @@ download_dataset() {
 download_competition commonlit-evaluate-student-summaries
 
 # Download datasets.
-download_dataset konumaru/microsoft-deberta-v3-base
+# download_dataset konumaru/microsoft-deberta-v3-base
+download_dataset konumaru/commonlit2023-finetuned-debertav3

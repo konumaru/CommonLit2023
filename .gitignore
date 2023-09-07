@@ -136,9 +136,11 @@ data/.hydra/
 *.txt
 *.pkl
 *.pth
+*.pt
 *.parquet
 *.npy
 *.json
+*.bin
 
 
 !data/upload/.gitkeep
@@ -147,3 +149,6 @@ data/upload/*
 
 !data/external/.gitkeep
 data/external/*
+
+!data/train/.gitkeep
+data/train/*

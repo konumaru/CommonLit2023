@@ -3,6 +3,7 @@ import re
 from typing import List
 
 import hydra
+import nltk
 import numpy as np
 import pandas as pd
 import torch
@@ -135,6 +136,41 @@ def spell_miss_count(data: pd.DataFrame) -> np.ndarray:
     return results.reshape(-1, 1)
 
 
+def pos_tag_counter(row: pd.Series, pos: str) -> int:
+    words = row["text"].split(" ")
+    words = [word for word in words if len(word) > 0]
+    tags = nltk.pos_tag(words)
+    return len([tag for word, tag in tags if tag == pos])
+
+
+@feature(FEATURE_DIR, False)
+def pos_tag_count(data: pd.DataFrame) -> np.ndarray:
+    # TODO: pos_tagごとに形態素解析させずに処理したら早くなる
+    pos_tags = [
+        "NN",
+        "NNP",
+        "NNS",
+        "PRP",
+        "VB",
+        "VBD",
+        "VBG",
+        "VBN",
+        "VBP",
+        "VBZ",
+        "JJ",
+        "JJR",
+        "JJS",
+        "RB",
+        "UH",
+        "CD",
+    ]
+    pos_tags_cnt = [
+        data.apply(pos_tag_counter, axis=1, args=(pos,)) for pos in pos_tags
+    ]
+    results = pd.concat(pos_tags_cnt, axis=1).to_numpy()
+    return results
+
+
 def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
     dataset = CommonLitDataset(input_texts, model_name, max_len=512)
     dataloader = DataLoader(
@@ -184,8 +220,9 @@ def create_features(data: pd.DataFrame):
         word_overlap_count,
         ngram_co_occurrence_count,
         spell_miss_count,
+        # pos_tag_count,
         deberta_text_embeddings,
-        deberta_prompt_embeddings,
+        # deberta_prompt_embeddings,
     ]
 
     for func in funcs:
@@ -202,7 +239,7 @@ def create_features(data: pd.DataFrame):
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
-    input_dir = pathlib.Path("./data/preprocessing")
+    input_dir = pathlib.Path(cfg.path.preprocessed)
 
     train = pd.read_csv(input_dir / "train.csv")
 

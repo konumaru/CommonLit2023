@@ -9,6 +9,8 @@ debug: False
 is_eval: True
 
 path:
+  raw: ./data/raw
+  preprocessed: ./data/preprocessed
   features: ./data/feature
   model: ./data/model
   train: ./data/train
@@ -23,6 +25,7 @@ features:
   - word_overlap_count
   - spell_miss_count
   - ngram_co_occurrence_count
+  # - pos_tag_count
   - deberta_text_embeddings
   # - deberta_prompt_embeddings
 

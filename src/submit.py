@@ -109,9 +109,7 @@ def spell_miss_count(data: pd.DataFrame) -> np.ndarray:
 
 def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
     dataset = CommonLitDataset(input_texts, model_name, max_len=512)
-    dataloader = DataLoader(
-        dataset, batch_size=64, shuffle=False, num_workers=8
-    )
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=8)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model = EmbeddingEncoder(model_name, device=device)
@@ -185,10 +183,7 @@ def main() -> None:
         models = []
         for fold in range(N_FOLD):
             model.load_model(
-                str(
-                    input_dir
-                    / f"xgb/seed=42/target={target_name}_fold={fold}.json"
-                )
+                str(input_dir / f"xgb/seed=42/target={target_name}_fold={fold}.json")
             )
             models.append(model)
         pred = predict(features, models)

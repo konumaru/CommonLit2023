@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# cp ./data/preprocessing/* ./data/upload/
+cp ./data/preprocessed/* ./data/upload/
 cp -r data/model/* ./data/upload/
 cp -r ./src/ ./data/upload/
 
