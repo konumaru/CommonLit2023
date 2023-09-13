@@ -6,12 +6,12 @@ import numpy as np
 import pandas as pd
 import torch
 from nltk.corpus import stopwords
-from rich.progress import track
 from spellchecker import SpellChecker
-from torch.utils.data import DataLoader
+from transformers import AutoModelForSequenceClassification
 from xgboost import XGBRegressor
 
-from models import CommonLitDataset, EmbeddingEncoder
+from finetune import CommonLitDataset
+from finetune import predict as predict_finetuned_model
 from utils import timer
 
 
@@ -107,35 +107,22 @@ def spell_miss_count(data: pd.DataFrame) -> np.ndarray:
     return results.reshape(-1, 1)
 
 
-def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
-    dataset = CommonLitDataset(input_texts, model_name, max_len=512)
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=False, num_workers=8)
+@torch.no_grad()
+def get_finetuned_model_preds(data: pd.DataFrame) -> np.ndarray:
+    model_dir = pathlib.Path("data/external/finetune-debertav3-training")
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = EmbeddingEncoder(model_name, device=device)
-
-    model.to(device)
-    model.eval()
-    with torch.no_grad():
-        embeddings_batch = []
-        for batch in track(dataloader):
-            z = model(batch)
-            embeddings_batch.append(z.detach().cpu().numpy())
-        embeddings = np.concatenate(embeddings_batch, axis=0)
-
-    return embeddings
-
-
-def deberta_text_embeddings(data: pd.DataFrame) -> np.ndarray:
-    model_name = "microsoft/deberta-v3-base"
-    embeddings = encode_embedding(model_name, data["text"].tolist())
-    return embeddings
-
-
-def deberta_prompt_embeddings(data: pd.DataFrame) -> np.ndarray:
-    model_name = "microsoft/deberta-v3-base"
-    embeddings = encode_embedding(model_name, data["prompt_text"].tolist())
-    return embeddings
+    preds = []
+    for fold in range(4):
+        model_path = model_dir / f"finetuned-deberta-v3-base-fold{fold}"
+        model = AutoModelForSequenceClassification.from_pretrained(
+            model_path, num_labels=2
+        )
+        dataset = CommonLitDataset(
+            data, "test", "microsoft/deberta-v3-base", is_train=False
+        )
+        pred = predict_finetuned_model(model, dataset)
+        preds.append(pred)
+    return np.mean(preds, axis=0)
 
 
 def create_features(data: pd.DataFrame):
@@ -149,7 +136,6 @@ def create_features(data: pd.DataFrame):
         word_overlap_count,
         spell_miss_count,
         ngram_co_occurrence_count,
-        deberta_text_embeddings,
     ]
 
     features_tmp = []
@@ -158,6 +144,9 @@ def create_features(data: pd.DataFrame):
         features_tmp.append(results)
 
     features = np.concatenate(features_tmp, axis=1)
+
+    finetuned_preds = get_finetuned_model_preds(data)
+    features = np.concatenate([features, finetuned_preds], axis=1)
     return features
 
 
@@ -183,7 +172,10 @@ def main() -> None:
         models = []
         for fold in range(N_FOLD):
             model.load_model(
-                str(input_dir / f"xgb/seed=42/target={target_name}_fold={fold}.json")
+                str(
+                    input_dir
+                    / f"xgb/seed=42/target={target_name}_fold={fold}.json"
+                )
             )
             models.append(model)
         pred = predict(features, models)

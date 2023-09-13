@@ -14,6 +14,7 @@ path:
   features: ./data/feature
   model: ./data/model
   train: ./data/train
+  external: ./data/external
 
 features:
   - text_length
@@ -26,7 +27,7 @@ features:
   - spell_miss_count
   - ngram_co_occurrence_count
   # - pos_tag_count
-  - deberta_text_embeddings
+  # - deberta_text_embeddings
   # - deberta_prompt_embeddings
 
 defaults:

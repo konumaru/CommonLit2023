@@ -21,15 +21,20 @@
   - TODO: target encoding of content and wording
     - count系の特徴量を使う？
 - cv strategy
-  - 5 Fold
-  - TODO: コンペの条件的にはGropuKFoldが適切
+  - Group K-Fold
+    - k: 4
+    - group:  prompt_id
 - model
-  - Simgle Model
+  - first statge model
+    - fine tuned deberta v3
+      - inputs: text
+  - second stage models
     - XGBoost
+      - inputs: first stage output, text feature
     - TODO: LightGBM
-    - TODO: fine tuned deberta v3
-      - inputs: text, spell_miss_count
-  - averag ensemble
+      - inputs: first stage output, text feature
+  - ensemble
+    - simple average of second stage models.
 
 ## Experiments
 
@@ -43,16 +48,13 @@
 | 6 | 0.4759433370779221 | -- | add feature of tri-gram co-occur words |
 | 7 | 0.4737618975123431 | -- | change xgb n_estimatoers param 500 to 800 |
 | 8 | 0.4744999729694380 | 0.479 | rm featrue of debertav3 prompt embeddings |
+| - | ------------------ | -- | change evaluate mothod |
 | 9 | 0.5576348008005831 | 0.478 | change kfold to group kfold |
 | 10 | 0.5572727558437666 |  | add feature of spell_miss_count |
 | 11 | 0.5560561772865491 | 0.479 | add feature of quotes_count |
-| 13 |  |  | fine tuning deberta mdoel |
+| 12 | 0.5451717268584183 | 0.559 | only finetuned deberta base |
+| 13 | 0.5168956770838019 | 0.491 | stacking xgb on deberta |
 
-## EDA
+## Not Worked For Me
 
-- TODO: promptとtext間のスペルミスにどのようなものがあるか見てみる
-
-## TODO
-
-- bebertaのfine tuningする
-- テキストの特徴量を増やす
+- Fine tune with content and wording at the same.

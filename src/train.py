@@ -3,6 +3,7 @@ from typing import Union
 
 import hydra
 import numpy as np
+import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
@@ -22,7 +23,9 @@ def fit_rf(
 ) -> RandomForestRegressor:
     model = RandomForestRegressor(n_estimators=100, random_state=seed)
     model.fit(X_train, y_train)
-    save_pickle(str(pathlib.Path(save_filepath) / f"{save_filepath}.pkl"), model)
+    save_pickle(
+        str(pathlib.Path(save_filepath) / f"{save_filepath}.pkl"), model
+    )
     return model
 
 
@@ -47,22 +50,32 @@ def fit_xgb(
     return model
 
 
+def get_first_stage_oof(cfg: DictConfig) -> np.ndarray:
+    external_output_dir = pathlib.Path(cfg.path.external)
+
+    oof = pd.read_csv(
+        str(external_output_dir / "finetune-debertav3-training/oof.csv")
+    )
+    preds = oof[["pred_content", "pred_wording"]].to_numpy()
+    return preds
+
+
 def train(cfg: DictConfig) -> None:
     features_dir = pathlib.Path(cfg.path.features)
 
     features = load_feature(features_dir, cfg.features)
+    first_oof = get_first_stage_oof(cfg)
+    features = np.concatenate([features, first_oof], axis=1)
+
     folds = load_pickle(features_dir / "fold.pkl").ravel()
     oof = np.zeros(shape=(len(features), 2))
     targets = oof.copy()
-
-    model_dir_suffix = f"{cfg.model.name}/seed={cfg.seed}/"
-    model_dir = pathlib.Path(cfg.path.model) / model_dir_suffix
-    model_dir.mkdir(exist_ok=True, parents=True)
 
     for i, target_name in enumerate(["content", "wording"]):
         print("Target:", target_name)
         target = load_pickle(features_dir / f"{target_name}.pkl").ravel()
         targets[:, i] = target
+
         for fold in range(cfg.n_splits):
             print(f"Fold: {fold}")
             X_train = features[folds != fold]
@@ -70,7 +83,11 @@ def train(cfg: DictConfig) -> None:
             X_valid = features[folds == fold]
             y_valid = target[folds == fold]
 
+            model_dir_suffix = f"{cfg.model.name}/seed={cfg.seed}/"
+            model_dir = pathlib.Path(cfg.path.model) / model_dir_suffix
+            model_dir.mkdir(exist_ok=True, parents=True)
             saved_filename = f"target={target_name}_fold={fold}"
+
             if cfg.model.name == "rf":
                 model = fit_rf(
                     cfg.model.params,
@@ -109,7 +126,9 @@ def evaluate(cfg: DictConfig) -> None:
     print(score)
 
 
-@hydra.main(config_path="../config", config_name="config.yaml", version_base="1.3")
+@hydra.main(
+    config_path="../config", config_name="config.yaml", version_base="1.3"
+)
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
