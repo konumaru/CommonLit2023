@@ -1,0 +1,10 @@
+name: lgbm
+
+params:
+  boosting_type: gbdt
+  n_estimators: 800
+  learning_rate: 0.02
+  max_depth: 4
+  objective: regression
+  subsample: 0.9
+  colsample_bytree: 0.7

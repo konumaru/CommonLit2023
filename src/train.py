@@ -2,8 +2,10 @@ import pathlib
 from typing import Union
 
 import hydra
+import lightgbm
 import numpy as np
 import pandas as pd
+from lightgbm import LGBMRegressor
 from omegaconf import DictConfig, OmegaConf
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
@@ -11,7 +13,7 @@ from xgboost import XGBRegressor
 from metric import mcrmse
 from utils import timer
 from utils.feature import load_feature
-from utils.io import load_pickle, save_pickle
+from utils.io import load_pickle, save_pickle, save_txt
 
 
 def fit_rf(
@@ -21,7 +23,8 @@ def fit_rf(
     save_filepath: str,
     seed: int = 42,
 ) -> RandomForestRegressor:
-    model = RandomForestRegressor(n_estimators=100, random_state=seed)
+    model = RandomForestRegressor(**params)
+    model.set_params(random_state=seed)
     model.fit(X_train, y_train)
     save_pickle(
         str(pathlib.Path(save_filepath) / f"{save_filepath}.pkl"), model
@@ -50,6 +53,32 @@ def fit_xgb(
     return model
 
 
+def fit_lgbm(
+    params,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_valid: np.ndarray,
+    y_valid: np.ndarray,
+    save_filepath: str,
+    seed: int = 42,
+) -> LGBMRegressor:
+    model = LGBMRegressor(**params)
+    model.set_params(random_state=seed)
+    model.fit(
+        X_train,
+        y_train,
+        eval_set=[(X_train, y_train), (X_valid, y_valid)],
+        eval_metric="rmse",
+        callbacks=[lightgbm.log_evaluation(50), lightgbm.early_stopping(50)],
+    )
+    model.booster_.save_model(  # type: ignore
+        save_filepath + ".txt",
+        num_iteration=model.best_iteration_,
+        importance_type="gain",
+    )
+    return model
+
+
 def get_first_stage_oof(cfg: DictConfig) -> np.ndarray:
     external_output_dir = pathlib.Path(cfg.path.external)
 
@@ -71,6 +100,10 @@ def train(cfg: DictConfig) -> None:
     oof = np.zeros(shape=(len(features), 2))
     targets = oof.copy()
 
+    model_dir_suffix = f"{cfg.model.name}/seed={cfg.seed}/"
+    model_dir = pathlib.Path(cfg.path.model) / model_dir_suffix
+    model_dir.mkdir(exist_ok=True, parents=True)
+
     for i, target_name in enumerate(["content", "wording"]):
         print("Target:", target_name)
         target = load_pickle(features_dir / f"{target_name}.pkl").ravel()
@@ -83,9 +116,6 @@ def train(cfg: DictConfig) -> None:
             X_valid = features[folds == fold]
             y_valid = target[folds == fold]
 
-            model_dir_suffix = f"{cfg.model.name}/seed={cfg.seed}/"
-            model_dir = pathlib.Path(cfg.path.model) / model_dir_suffix
-            model_dir.mkdir(exist_ok=True, parents=True)
             saved_filename = f"target={target_name}_fold={fold}"
 
             if cfg.model.name == "rf":
@@ -106,16 +136,28 @@ def train(cfg: DictConfig) -> None:
                     y_valid,
                 )
                 oof[folds == fold, i] = model.predict(X_valid)
+            elif cfg.model.name == "lgbm":
+                model = fit_lgbm(
+                    cfg.model.params,
+                    X_train,
+                    y_train,
+                    X_valid,
+                    y_valid,
+                    str(model_dir / saved_filename),
+                )
+                oof[folds == fold, i] = model.predict(X_valid)
 
-    output_dir = pathlib.Path(cfg.path.train)
-    save_pickle(str(output_dir / "oof.pkl"), oof)
+    save_pickle(str(model_dir / "oof.pkl"), oof)
 
 
 def evaluate(cfg: DictConfig) -> None:
     features_dir = pathlib.Path(cfg.path.features)
-    train_output_dir = pathlib.Path(cfg.path.train)
 
-    oof = load_pickle(str(train_output_dir / "oof.pkl"))
+    model_dir_suffix = f"{cfg.model.name}/seed={cfg.seed}/"
+    model_dir = pathlib.Path(cfg.path.model) / model_dir_suffix
+    model_dir.mkdir(exist_ok=True, parents=True)
+
+    oof = load_pickle(str(model_dir / "oof.pkl"))
 
     targets = np.zeros_like(oof)
     for i, target_name in enumerate(["content", "wording"]):
@@ -124,6 +166,11 @@ def evaluate(cfg: DictConfig) -> None:
 
     score = mcrmse(targets, oof)
     print(score)
+
+    save_txt(
+        str(model_dir / "score.txt"),
+        str(score),
+    )
 
 
 @hydra.main(

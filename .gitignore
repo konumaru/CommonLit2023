@@ -142,7 +142,6 @@ data/.hydra/
 *.json
 *.bin
 
-
 !data/upload/.gitkeep
 !data/upload/dataset-metadata.json
 data/upload/*
@@ -152,3 +151,5 @@ data/external/*
 
 !data/train/.gitkeep
 data/train/*
+
+multirun/*

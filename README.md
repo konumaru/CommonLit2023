@@ -29,9 +29,9 @@
     - fine tuned deberta v3
       - inputs: text
   - second stage models
-    - XGBoost
+    - XGBoost (cv=0.5168956770838019)
       - inputs: first stage output, text feature
-    - TODO: LightGBM
+    - LightGBM (cv=0.5178261265275084)
       - inputs: first stage output, text feature
   - ensemble
     - simple average of second stage models.
@@ -54,6 +54,9 @@
 | 11 | 0.5560561772865491 | 0.479 | add feature of quotes_count |
 | 12 | 0.5451717268584183 | 0.559 | only finetuned deberta base |
 | 13 | 0.5168956770838019 | 0.491 | stacking xgb on deberta |
+---
+| 14 |  |  | ensenble lgbm |
+| 15 |  |  | add feature of target encoding |
 
 ## Not Worked For Me
 

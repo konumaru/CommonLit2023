@@ -1,5 +1,4 @@
 name: xgb
-is_balanced: False
 
 params:
   booster: gbtree
