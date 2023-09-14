@@ -55,7 +55,7 @@
 | 12 | 0.5451717268584183 | 0.559 | only finetuned deberta base |
 | 13 | 0.5168956770838019 | 0.491 | stacking xgb on deberta |
 ---
-| 14 |  |  | ensenble lgbm |
+| 14 | 0.5162055570275468 |  | ensenble lgbm |
 | 15 |  |  | add feature of target encoding |
 
 ## Not Worked For Me
