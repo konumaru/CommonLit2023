@@ -18,14 +18,17 @@
     - spell miss count, SpellChecker
   - text embedding
     - deberta v3
-  - TODO: target encoding of content and wording
-    - count系の特徴量を使う？
+  - target encoding of content and wording
+    - groupby word count (rounded to 5)
+    - sentence count (clip between 1 and 20)
+    - TODO: count系の特徴量を使う？
+      - spell miss count
 - cv strategy
   - Group K-Fold
     - k: 4
     - group:  prompt_id
 - model
-  - first statge model
+  - first statge model (cv=0.5451717268584183)
     - fine tuned deberta v3
       - inputs: text
   - second stage models
@@ -54,10 +57,13 @@
 | 11 | 0.5560561772865491 | 0.479 | add feature of quotes_count |
 | 12 | 0.5451717268584183 | 0.559 | only finetuned deberta base |
 | 13 | 0.5168956770838019 | 0.491 | stacking xgb on deberta |
----
 | 14 | 0.5162055570275468 |  | ensenble lgbm |
-| 15 |  |  | add feature of target encoding |
+| 15 | 0.5148750859363870 |  | add feature of target encoding |
 
 ## Not Worked For Me
 
-- Fine tune with content and wording at the same.
+## TODO
+
+- target encodingの特徴量を追加する
+  - 学習データの集約値を辞書型に保持して、予測時にそれをしたがってmapする
+- fine tuned modelの精度を上げる

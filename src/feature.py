@@ -16,6 +16,7 @@ from torch.utils.data import DataLoader
 from models import CommonLitDataset, EmbeddingEncoder
 from utils import timer
 from utils.feature import feature, load_feature
+from utils.io import load_pickle
 
 FEATURE_DIR = "./data/feature"
 
@@ -206,6 +207,48 @@ def deberta_prompt_embeddings(data: pd.DataFrame) -> np.ndarray:
     return embeddings
 
 
+def round_to_5(n):
+    return round(n / 5) * 5
+
+
+@feature(FEATURE_DIR)
+def target_encoded_word_count(data: pd.DataFrame) -> np.ndarray:
+    _data = data.copy()
+    f = load_pickle("data/feature/word_count.pkl")
+    _data["clipped_word_count"] = (
+        pd.Series(f.ravel()).clip(25, 200).apply(round_to_5)
+    )
+    results = (
+        _data.groupby(["fold", "clipped_word_count"])[["content", "wording"]]
+        .transform("mean")
+        .to_numpy()
+    )
+    encoding_map = _data.groupby(["clipped_word_count"])[
+        ["content", "wording"]
+    ].mean()
+
+    encoding_map.to_csv("data/feature/target_encoded_word_count.csv")
+    return results
+
+
+@feature(FEATURE_DIR)
+def target_encoded_sentence_count(data: pd.DataFrame) -> np.ndarray:
+    _data = data.copy()
+    f = load_pickle("data/feature/sentence_count.pkl")
+    _data["sentence_count"] = pd.Series(f.ravel()).clip(None, 20)
+    results = (
+        _data.groupby(["fold", "sentence_count"])[["content", "wording"]]
+        .transform("mean")
+        .to_numpy()
+    )
+    encoding_map = _data.groupby(["sentence_count"])[
+        ["content", "wording"]
+    ].mean()
+
+    encoding_map.to_csv("data/feature/target_encoded_sentence_count.csv")
+    return results
+
+
 def create_features(data: pd.DataFrame):
     funcs = [
         fold,
@@ -223,6 +266,8 @@ def create_features(data: pd.DataFrame):
         # pos_tag_count,
         deberta_text_embeddings,
         # deberta_prompt_embeddings,
+        target_encoded_word_count,
+        target_encoded_sentence_count,
     ]
 
     for func in funcs:

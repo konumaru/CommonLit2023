@@ -29,6 +29,8 @@ features:
   # - pos_tag_count
   # - deberta_text_embeddings
   # - deberta_prompt_embeddings
+  - target_encoded_word_count
+  # - target_encoded_sentence_count
 
 defaults:
   - _self_
