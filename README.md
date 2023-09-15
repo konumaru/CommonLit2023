@@ -60,10 +60,6 @@
 | 14 | 0.5162055570275468 |  | ensenble lgbm |
 | 15 | 0.5148750859363870 |  | add feature of target encoding |
 
-## Not Worked For Me
+## Not worked for me
 
-## TODO
-
-- target encodingの特徴量を追加する
-  - 学習データの集約値を辞書型に保持して、予測時にそれをしたがってmapする
-- fine tuned modelの精度を上げる
+## Feature works
