@@ -6,5 +6,5 @@ params:
   learning_rate: 0.02
   max_depth: 4
   objective: regression
-  subsample: 0.9
-  colsample_bytree: 0.7
+  subsample: 0.8
+  colsample_bytree: 1.0

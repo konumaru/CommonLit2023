@@ -21,7 +21,7 @@ def get_oofs(cfg: DictConfig) -> Dict[str, np.ndarray]:
 
 
 def get_tragets(cfg: DictConfig) -> np.ndarray:
-    features_dir = pathlib.Path(cfg.path.features)
+    features_dir = pathlib.Path(cfg.path.feature)
     targets = []
     for target_name in ["content", "wording"]:
         target = load_pickle(features_dir / f"{target_name}.pkl")

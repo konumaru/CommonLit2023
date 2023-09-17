@@ -10,9 +10,9 @@ from omegaconf import DictConfig, OmegaConf
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 
+from feature import CommonLitFeature
 from metric import mcrmse
 from utils import timer
-from utils.feature import load_feature
 from utils.io import load_pickle, save_pickle, save_txt
 
 
@@ -82,22 +82,29 @@ def fit_lgbm(
 def get_first_stage_oof(cfg: DictConfig) -> np.ndarray:
     external_output_dir = pathlib.Path(cfg.path.external)
 
-    oof = pd.read_csv(
-        str(external_output_dir / "finetune-debertav3-training/oof.csv")
-    )
-    preds = oof[["pred_content", "pred_wording"]].to_numpy()
-    return preds
+    filepaths = [
+        "finetune-debertav3-training/oof.csv",
+        # "finetune-roberta-training/oof.csv",
+    ]
+
+    preds = []
+    for filepath in filepaths:
+        oof = pd.read_csv(str(external_output_dir / filepath))
+        pred = oof[["pred_content", "pred_wording"]].to_numpy()
+        preds.append(pred)
+    return np.concatenate(preds, axis=1)
 
 
 def train(cfg: DictConfig) -> None:
-    features_dir = pathlib.Path(cfg.path.features)
+    cl_feature = CommonLitFeature(pd.DataFrame(), feature_dir=cfg.path.feature)
+    text_features = cl_feature.load_feature()
 
-    features = load_feature(features_dir, cfg.features)
-    print(features.shape)
     first_oof = get_first_stage_oof(cfg)
-    features = np.concatenate([features, first_oof], axis=1)
+    features = np.concatenate([text_features, first_oof], axis=1)
 
+    features_dir = pathlib.Path(cfg.path.feature)
     folds = load_pickle(features_dir / "fold.pkl").ravel()
+
     oof = np.zeros(shape=(len(features), 2))
     targets = oof.copy()
 
@@ -152,7 +159,7 @@ def train(cfg: DictConfig) -> None:
 
 
 def evaluate(cfg: DictConfig) -> None:
-    features_dir = pathlib.Path(cfg.path.features)
+    features_dir = pathlib.Path(cfg.path.feature)
 
     model_dir_suffix = f"{cfg.model.name}/seed={cfg.seed}/"
     model_dir = pathlib.Path(cfg.path.model) / model_dir_suffix

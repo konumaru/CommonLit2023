@@ -11,26 +11,10 @@ is_eval: True
 path:
   raw: ./data/raw
   preprocessed: ./data/preprocessed
-  features: ./data/feature
+  feature: ./data/feature
   model: ./data/model
   train: ./data/train
   external: ./data/external
-
-features:
-  - text_length
-  - word_count
-  - sentence_count
-  - quoted_sentence_count
-  - consecutive_dots_count
-  - quotes_count
-  - word_overlap_count
-  - spell_miss_count
-  - ngram_co_occurrence_count
-  # - pos_tag_count
-  # - deberta_text_embeddings
-  # - deberta_prompt_embeddings
-  - target_encoded_word_count
-  # - target_encoded_sentence_count
 
 defaults:
   - _self_

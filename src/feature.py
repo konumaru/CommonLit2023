@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader
 
 from models import CommonLitDataset, EmbeddingEncoder
 from utils import timer
-from utils.feature import feature, load_feature
+from utils.feature import BaseFeature, feature
 from utils.io import load_pickle
 
 FEATURE_DIR = "./data/feature"
@@ -36,34 +36,14 @@ def wording(data: pd.DataFrame) -> np.ndarray:
     return data["wording"].to_numpy().reshape(-1, 1)
 
 
-@feature(FEATURE_DIR)
-def text_length(data: pd.DataFrame) -> np.ndarray:
-    results = data["text"].str.len().to_numpy().reshape(-1, 1)
-    return results
+def create_target_and_fold(data: pd.DataFrame) -> None:
+    _data = data.copy()
+    funcs = [fold, content, wording]
+    for func in funcs:
+        func(_data)
 
 
-@feature(FEATURE_DIR)
-def word_count(data: pd.DataFrame) -> np.ndarray:
-    results = data["text"].str.split().str.len()
-    return results.to_numpy().reshape(-1, 1)
-
-
-@feature(FEATURE_DIR)
-def sentence_count(data: pd.DataFrame) -> np.ndarray:
-    results = data["text"].str.split(".").str.len()
-    return results.to_numpy().reshape(-1, 1)
-
-
-@feature(FEATURE_DIR)
-def quoted_sentence_count(data: pd.DataFrame) -> np.ndarray:
-    results = data["text"].apply(lambda x: len(re.findall(r'"(.*?)"', str(x))))
-    return results.to_numpy().reshape(-1, 1)
-
-
-@feature(FEATURE_DIR)
-def consecutive_dots_count(data: pd.DataFrame) -> np.ndarray:
-    results = data["text"].apply(lambda x: len(re.findall(r"\.{3,4}", str(x))))
-    return results.to_numpy().reshape(-1, 1)
+# -- For Feature Engineering --
 
 
 def quotes_counter(row: pd.Series):
@@ -75,12 +55,6 @@ def quotes_counter(row: pd.Series):
         return [quote in text for quote in quotes_from_summary].count(True)
     else:
         return 0
-
-
-@feature(FEATURE_DIR)
-def quotes_count(data: pd.DataFrame) -> np.ndarray:
-    results = data.apply(quotes_counter, axis=1)
-    return results.to_numpy().reshape(-1, 1)
 
 
 def word_overlap_counter(row: pd.Series) -> int:
@@ -112,64 +86,11 @@ def ngram_co_occurrence_counter(row: pd.Series, n: int = 2) -> int:
     return len(common_ngrams)
 
 
-@feature(FEATURE_DIR)
-def word_overlap_count(data: pd.DataFrame) -> np.ndarray:
-    results = data.apply(word_overlap_counter, axis=1)
-    return results.to_numpy().reshape(-1, 1)
-
-
-@feature(FEATURE_DIR)
-def ngram_co_occurrence_count(data: pd.DataFrame) -> np.ndarray:
-    bi_gram = data.apply(ngram_co_occurrence_counter, axis=1, args=(2,))
-    tr_gram = data.apply(ngram_co_occurrence_counter, axis=1, args=(3,))
-
-    results = pd.concat([bi_gram, tr_gram], axis=1)
-    return results.to_numpy()
-
-
-@feature(FEATURE_DIR)
-def spell_miss_count(data: pd.DataFrame) -> np.ndarray:
-    def counter(row: pd.Series) -> int:
-        words = row["text"].split(" ")
-        return len(SpellChecker().unknown(words))
-
-    results = data.apply(counter, axis=1).to_numpy()
-    return results.reshape(-1, 1)
-
-
 def pos_tag_counter(row: pd.Series, pos: str) -> int:
     words = row["text"].split(" ")
     words = [word for word in words if len(word) > 0]
     tags = nltk.pos_tag(words)
     return len([tag for word, tag in tags if tag == pos])
-
-
-@feature(FEATURE_DIR, False)
-def pos_tag_count(data: pd.DataFrame) -> np.ndarray:
-    # TODO: pos_tagごとに形態素解析させずに処理したら早くなる
-    pos_tags = [
-        "NN",
-        "NNP",
-        "NNS",
-        "PRP",
-        "VB",
-        "VBD",
-        "VBG",
-        "VBN",
-        "VBP",
-        "VBZ",
-        "JJ",
-        "JJR",
-        "JJS",
-        "RB",
-        "UH",
-        "CD",
-    ]
-    pos_tags_cnt = [
-        data.apply(pos_tag_counter, axis=1, args=(pos,)) for pos in pos_tags
-    ]
-    results = pd.concat(pos_tags_cnt, axis=1).to_numpy()
-    return results
 
 
 def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
@@ -193,94 +114,179 @@ def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
     return embeddings
 
 
-@feature(FEATURE_DIR)
-def deberta_text_embeddings(data: pd.DataFrame) -> np.ndarray:
-    model_name = "microsoft/deberta-v3-base"
-    embeddings = encode_embedding(model_name, data["text"].tolist())
-    return embeddings
-
-
-@feature(FEATURE_DIR)
-def deberta_prompt_embeddings(data: pd.DataFrame) -> np.ndarray:
-    model_name = "microsoft/deberta-v3-base"
-    embeddings = encode_embedding(model_name, data["prompt_text"].tolist())
-    return embeddings
-
-
 def round_to_5(n):
     return round(n / 5) * 5
 
 
-@feature(FEATURE_DIR)
-def target_encoded_word_count(data: pd.DataFrame) -> np.ndarray:
-    _data = data.copy()
-    f = load_pickle("data/feature/word_count.pkl")
-    _data["clipped_word_count"] = (
-        pd.Series(f.ravel()).clip(25, 200).apply(round_to_5)
-    )
-    results = (
-        _data.groupby(["fold", "clipped_word_count"])[["content", "wording"]]
-        .transform("mean")
-        .to_numpy()
-    )
-    encoding_map = _data.groupby(["clipped_word_count"])[
+class CommonLitFeature(BaseFeature):
+    def __init__(
+        self,
+        data: pd.DataFrame,
+        use_cache: bool = True,
+        is_test: bool = False,
+        feature_dir: str | None = None,
+    ) -> None:
+        super().__init__(data, use_cache, is_test, feature_dir)
+
+    @BaseFeature.cache()
+    def text_length(self) -> np.ndarray:
+        results = self.data["text"].str.len().to_numpy().reshape(-1, 1)
+        return results
+
+    @BaseFeature.cache()
+    def word_count(self) -> np.ndarray:
+        results = self.data["text"].str.split().str.len()
+        return results.to_numpy().reshape(-1, 1)
+
+    @BaseFeature.cache()
+    def sentence_count(self) -> np.ndarray:
+        results = self.data["text"].str.split(".").str.len()
+        return results.to_numpy().reshape(-1, 1)
+
+    @BaseFeature.cache()
+    def quoted_sentence_count(self) -> np.ndarray:
+        results = self.data["text"].apply(
+            lambda x: len(re.findall(r'"(.*?)"', str(x)))
+        )
+        return results.to_numpy().reshape(-1, 1)
+
+    @BaseFeature.cache()
+    def consecutive_dots_count(self) -> np.ndarray:
+        results = self.data["text"].apply(
+            lambda x: len(re.findall(r"\.{3,4}", str(x)))
+        )
+        return results.to_numpy().reshape(-1, 1)
+
+    @BaseFeature.cache()
+    def quotes_count(self) -> np.ndarray:
+        results = self.data.apply(quotes_counter, axis=1)
+        return results.to_numpy().reshape(-1, 1)
+
+    @BaseFeature.cache()
+    def word_overlap_count(self) -> np.ndarray:
+        results = self.data.apply(word_overlap_counter, axis=1)
+        return results.to_numpy().reshape(-1, 1)
+
+    @BaseFeature.cache()
+    def ngram_co_occurrence_count(self) -> np.ndarray:
+        bi_gram = self.data.apply(
+            ngram_co_occurrence_counter, axis=1, args=(2,)
+        )
+        tr_gram = self.data.apply(
+            ngram_co_occurrence_counter, axis=1, args=(3,)
+        )
+
+        results = pd.concat([bi_gram, tr_gram], axis=1)
+        return results.to_numpy()
+
+    @BaseFeature.cache()
+    def spell_miss_count(self) -> np.ndarray:
+        def counter(row: pd.Series) -> int:
+            words = row["text"].split(" ")
+            return len(SpellChecker().unknown(words))
+
+        results = self.data.apply(counter, axis=1).to_numpy()
+        return results.reshape(-1, 1)
+
+    # @BaseFeature.cache()
+    # def pos_tag_count(self) -> np.ndarray:
+    #     # TODO: pos_tagごとに形態素解析させずに処理したら早くなる
+    #     pos_tags = [
+    #         "NN",
+    #         "NNP",
+    #         "NNS",
+    #         "PRP",
+    #         "VB",
+    #         "VBD",
+    #         "VBG",
+    #         "VBN",
+    #         "VBP",
+    #         "VBZ",
+    #         "JJ",
+    #         "JJR",
+    #         "JJS",
+    #         "RB",
+    #         "UH",
+    #         "CD",
+    #     ]
+    #     pos_tags_cnt = [
+    #         self.data.apply(pos_tag_counter, axis=1, args=(pos,))
+    #         for pos in pos_tags
+    #     ]
+    #     results = pd.concat(pos_tags_cnt, axis=1).to_numpy()
+    #     return results
+
+    # @BaseFeature.cache()
+    # def deberta_text_embeddings(self) -> np.ndarray:
+    #     model_name = "microsoft/deberta-v3-base"
+    #     embeddings = encode_embedding(model_name, self.data["text"].tolist())
+    #     return embeddings
+
+    # @BaseFeature.cache()
+    # def deberta_prompt_embeddings(self) -> np.ndarray:
+    #     model_name = "microsoft/deberta-v3-base"
+    #     embeddings = encode_embedding(
+    #         model_name, self.data["prompt_text"].tolist()
+    #     )
+    #     return embeddings
+
+    @BaseFeature.cache()
+    def target_encoded_word_count(self) -> np.ndarray:
+        _data = self.data.copy()
+        word_cnt = self.word_count().ravel()
+        _data["clipped_word_count"] = (
+            pd.Series(word_cnt).clip(25, 200).apply(round_to_5)
+        )
+
+        if self.is_test:
+            encoding_map = pd.read_csv(
+                "data/preprocessed/target_encoded_word_count.csv"
+            )
+            _data = _data.merge(
+                encoding_map, on="clipped_word_count", how="left"
+            )
+            results = _data[["content", "wording"]].to_numpy()
+            return results
+        else:
+            results = (
+                _data.groupby(["fold", "clipped_word_count"])[
+                    ["content", "wording"]
+                ]
+                .transform("mean")
+                .to_numpy()
+            )
+            return results
+
+    # @BaseFeature.cache()
+    # def target_encoded_sentence_count(self) -> np.ndarray:
+    #     _data = self.data.copy()
+    #     f = load_pickle("data/feature/sentence_count.pkl")
+    #     _data["sentence_count"] = pd.Series(f.ravel()).clip(None, 20)
+    #     results = (
+    #         _data.groupby(["fold", "sentence_count"])[["content", "wording"]]
+    #         .transform("mean")
+    #         .to_numpy()
+    #     )
+    #     encoding_map = _data.groupby(["sentence_count"])[
+    #         ["content", "wording"]
+    #     ].mean()
+
+    #     encoding_map.to_csv(
+    #         "data/preprocessed/target_encoded_sentence_count.csv"
+    #     )
+    #     return results
+
+
+def create_target_encoding_map(cfg: DictConfig, data: pd.DataFrame) -> None:
+    feature_dir = pathlib.Path(cfg.path.feature)
+    output_dir = pathlib.Path(cfg.path.preprocessed)
+
+    word_cnt = pd.Series(load_pickle(feature_dir / "word_count.pkl").ravel())
+    data["clipped_word_count"] = word_cnt.clip(25, 200).apply(round_to_5)
+    encoding_map = data.groupby(["clipped_word_count"])[
         ["content", "wording"]
     ].mean()
-
-    encoding_map.to_csv("data/preprocessed/target_encoded_word_count.csv")
-    return results
-
-
-@feature(FEATURE_DIR)
-def target_encoded_sentence_count(data: pd.DataFrame) -> np.ndarray:
-    _data = data.copy()
-    f = load_pickle("data/feature/sentence_count.pkl")
-    _data["sentence_count"] = pd.Series(f.ravel()).clip(None, 20)
-    results = (
-        _data.groupby(["fold", "sentence_count"])[["content", "wording"]]
-        .transform("mean")
-        .to_numpy()
-    )
-    encoding_map = _data.groupby(["sentence_count"])[
-        ["content", "wording"]
-    ].mean()
-
-    encoding_map.to_csv("data/preprocessed/target_encoded_sentence_count.csv")
-    return results
-
-
-def create_target_and_fold(data: pd.DataFrame) -> None:
-    _data = data.copy()
-    funcs = [fold, content, wording]
-    for func in funcs:
-        func(_data)
-
-
-def create_features(data: pd.DataFrame) -> np.ndarray:
-    funcs = [
-        text_length,
-        word_count,
-        sentence_count,
-        quoted_sentence_count,
-        consecutive_dots_count,
-        quotes_count,
-        word_overlap_count,
-        spell_miss_count,
-        ngram_co_occurrence_count,
-        # pos_tag_count,
-        # deberta_text_embeddings,
-        # deberta_prompt_embeddings,
-        target_encoded_word_count,
-        # target_encoded_sentence_count,
-    ]
-
-    for func in funcs:
-        tmp = func(data)
-        assert tmp.shape[0] == data.shape[0]
-
-    feature_names = [func.__name__ for func in funcs]
-    features = load_feature(FEATURE_DIR, feature_names)
-    return features
+    encoding_map.to_csv(output_dir / "target_encoded_word_count.csv")
 
 
 @hydra.main(
@@ -295,8 +301,12 @@ def main(cfg: DictConfig) -> None:
     print(train.shape)
 
     create_target_and_fold(train)
-    features = create_features(train)
-    print(pd.DataFrame(features).info())
+
+    features = CommonLitFeature(train, feature_dir=cfg.path.feature)
+    results = features.create_features()
+    print(pd.DataFrame(results).info())
+
+    create_target_encoding_map(cfg, train)
 
 
 if __name__ == "__main__":
