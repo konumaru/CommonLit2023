@@ -56,7 +56,9 @@ def main() -> None:
     sample_submission = pd.read_csv(raw_dir / "sample_submission.csv")
     test = pd.merge(prompts, summaries, on="prompt_id", how="right")
 
-    cl_feature = CommonLitFeature(test, is_test=True)
+    cl_feature = CommonLitFeature(
+        test, is_test=True, preprocess_dir="./data/upload"
+    )
     text_features = cl_feature.create_features()
     preds_deberta = get_finetuned_model_preds(test, N_FOLD)
 

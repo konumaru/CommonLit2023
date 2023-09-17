@@ -125,8 +125,10 @@ class CommonLitFeature(BaseFeature):
         use_cache: bool = True,
         is_test: bool = False,
         feature_dir: str | None = None,
+        preprocess_dir: str | None = None,
     ) -> None:
         super().__init__(data, use_cache, is_test, feature_dir)
+        self.preprocess_dir = pathlib.Path(preprocess_dir)
 
     @BaseFeature.cache()
     def text_length(self) -> np.ndarray:
@@ -240,7 +242,7 @@ class CommonLitFeature(BaseFeature):
 
         if self.is_test:
             encoding_map = pd.read_csv(
-                "data/preprocessed/target_encoded_word_count.csv"
+                self.preprocess_dir / "target_encoded_word_count.csv"
             )
             _data = _data.merge(
                 encoding_map, on="clipped_word_count", how="left"
@@ -302,7 +304,11 @@ def main(cfg: DictConfig) -> None:
 
     create_target_and_fold(train)
 
-    features = CommonLitFeature(train, feature_dir=cfg.path.feature)
+    features = CommonLitFeature(
+        train,
+        feature_dir=cfg.path.feature,
+        preprocess_dir=cfg.path.preprocessed,
+    )
     results = features.create_features()
     print(pd.DataFrame(results).info())
 
