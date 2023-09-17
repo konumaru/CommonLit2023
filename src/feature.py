@@ -227,7 +227,7 @@ def target_encoded_word_count(data: pd.DataFrame) -> np.ndarray:
         ["content", "wording"]
     ].mean()
 
-    encoding_map.to_csv("data/feature/target_encoded_word_count.csv")
+    encoding_map.to_csv("data/preprocessed/target_encoded_word_count.csv")
     return results
 
 
@@ -245,15 +245,19 @@ def target_encoded_sentence_count(data: pd.DataFrame) -> np.ndarray:
         ["content", "wording"]
     ].mean()
 
-    encoding_map.to_csv("data/feature/target_encoded_sentence_count.csv")
+    encoding_map.to_csv("data/preprocessed/target_encoded_sentence_count.csv")
     return results
 
 
-def create_features(data: pd.DataFrame):
+def create_target_and_fold(data: pd.DataFrame) -> None:
+    _data = data.copy()
+    funcs = [fold, content, wording]
+    for func in funcs:
+        func(_data)
+
+
+def create_features(data: pd.DataFrame) -> np.ndarray:
     funcs = [
-        fold,
-        content,
-        wording,
         text_length,
         word_count,
         sentence_count,
@@ -261,17 +265,18 @@ def create_features(data: pd.DataFrame):
         consecutive_dots_count,
         quotes_count,
         word_overlap_count,
-        ngram_co_occurrence_count,
         spell_miss_count,
+        ngram_co_occurrence_count,
         # pos_tag_count,
-        deberta_text_embeddings,
+        # deberta_text_embeddings,
         # deberta_prompt_embeddings,
         target_encoded_word_count,
-        target_encoded_sentence_count,
+        # target_encoded_sentence_count,
     ]
 
     for func in funcs:
-        func(data)
+        tmp = func(data)
+        assert tmp.shape[0] == data.shape[0]
 
     feature_names = [func.__name__ for func in funcs]
     features = load_feature(FEATURE_DIR, feature_names)
@@ -287,9 +292,11 @@ def main(cfg: DictConfig) -> None:
     input_dir = pathlib.Path(cfg.path.preprocessed)
 
     train = pd.read_csv(input_dir / "train.csv")
+    print(train.shape)
 
+    create_target_and_fold(train)
     features = create_features(train)
-    print(pd.DataFrame(features).head())
+    print(pd.DataFrame(features).info())
 
 
 if __name__ == "__main__":

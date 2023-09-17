@@ -72,6 +72,7 @@ def compute_metrics(eval_pred):
     return {"rmse": rmse}
 
 
+@torch.no_grad()
 def predict(model: nn.Module, dataset: Dataset) -> np.ndarray:
     dataloader = DataLoader(dataset, batch_size=16, shuffle=False)
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -80,14 +81,13 @@ def predict(model: nn.Module, dataset: Dataset) -> np.ndarray:
 
     model.to(device)
     model.eval()
-    with torch.no_grad():
-        for batch in dataloader:
-            batch = {k: v.to(device) for k, v in batch.items()}
-            z = model(
-                input_ids=batch["input_ids"],
-                attention_mask=batch["attention_mask"],
-            )
-            preds.append(z.logits.detach().cpu().numpy())
+    for batch in dataloader:
+        batch = {k: v.to(device) for k, v in batch.items()}
+        z = model(
+            input_ids=batch["input_ids"],
+            attention_mask=batch["attention_mask"],
+        )
+        preds.append(z.logits.detach().cpu().numpy())
 
     preds_all = np.concatenate(preds, axis=0)
     return preds_all
@@ -104,61 +104,61 @@ def main(cfg: DictConfig) -> None:
     data = pd.read_csv(input_dir / "train.csv")
 
     # --- train ---
-    # for target in ["content", "wording"]:
-    #     for fold in range(cfg.n_splits):
-    #         print(f"Fold: {fold}")
-    #         train_dataset = CommonLitDataset(
-    #             data.query(f"fold!={fold}"),
-    #             target,
-    #             "microsoft/deberta-v3-base",
-    #         )
-    #         valid_dataset = CommonLitDataset(
-    #             data.query(f"fold=={fold}"),
-    #             target,
-    #             "microsoft/deberta-v3-base",
-    #         )
+    for target in ["content", "wording"]:
+        for fold in range(cfg.n_splits):
+            print(f"Fold: {fold}")
+            train_dataset = CommonLitDataset(
+                data.query(f"fold!={fold}"),
+                target,
+                "microsoft/deberta-v3-base",
+            )
+            valid_dataset = CommonLitDataset(
+                data.query(f"fold=={fold}"),
+                target,
+                "microsoft/deberta-v3-base",
+            )
 
-    #         model = AutoModelForSequenceClassification.from_pretrained(
-    #             "microsoft/deberta-v3-base", num_labels=1
-    #         )
+            model = AutoModelForSequenceClassification.from_pretrained(
+                "microsoft/deberta-v3-base", num_labels=1
+            )
 
-    #         output_dir = (
-    #             f"./data/train/finetuned-deberta-v3-base-{target}-fold{fold}"
-    #         )
-    #         training_args = TrainingArguments(
-    #             output_dir=output_dir,
-    #             overwrite_output_dir=True,
-    #             load_best_model_at_end=True,
-    #             report_to="none",  # type: ignore
-    #             greater_is_better=False,
-    #             num_train_epochs=1,
-    #             per_device_train_batch_size=16,
-    #             per_device_eval_batch_size=16,
-    #             learning_rate=1.5e-5,
-    #             weight_decay=0.02,
-    #             seed=cfg.seed,
-    #             metric_for_best_model="rmse",
-    #             save_strategy="steps",
-    #             evaluation_strategy="steps",
-    #             eval_steps=1,
-    #             save_steps=1,
-    #             save_total_limit=1,
-    #         )
+            output_dir = (
+                f"./data/train/finetuned-deberta-v3-base-{target}-fold{fold}"
+            )
+            training_args = TrainingArguments(
+                output_dir=output_dir,
+                overwrite_output_dir=True,
+                load_best_model_at_end=True,
+                report_to="none",  # type: ignore
+                greater_is_better=False,
+                num_train_epochs=1,
+                per_device_train_batch_size=16,
+                per_device_eval_batch_size=16,
+                learning_rate=1.5e-5,
+                weight_decay=0.02,
+                seed=cfg.seed,
+                metric_for_best_model="rmse",
+                save_strategy="steps",
+                evaluation_strategy="steps",
+                eval_steps=1,
+                save_steps=1,
+                save_total_limit=1,
+            )
 
-    #         trainer = Trainer(
-    #             model=model,
-    #             args=training_args,
-    #             train_dataset=train_dataset,
-    #             eval_dataset=valid_dataset,
-    #             compute_metrics=compute_metrics,  # type: ignore
-    #         )
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                train_dataset=train_dataset,
+                eval_dataset=valid_dataset,
+                compute_metrics=compute_metrics,  # type: ignore
+            )
 
-    #         trainer.train()
+            trainer.train()
 
-    #         save_model_dir = (
-    #             f"./data/model/finetuned-deberta-v3-base-{target}-fold{fold}"
-    #         )
-    #         model.save_pretrained(save_model_dir)
+            save_model_dir = (
+                f"./data/model/finetuned-deberta-v3-base-{target}-fold{fold}"
+            )
+            model.save_pretrained(save_model_dir)
 
     # --- predict ---
     data[["pred_content", "pred_wording"]] = 0.0

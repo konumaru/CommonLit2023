@@ -7,7 +7,7 @@ from omegaconf import DictConfig, OmegaConf
 
 from metric import mcrmse
 from utils import timer
-from utils.io import load_pickle, save_txt
+from utils.io import load_pickle
 
 
 def get_oofs(cfg: DictConfig) -> Dict[str, np.ndarray]:

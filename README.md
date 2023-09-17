@@ -21,8 +21,6 @@
   - target encoding of content and wording
     - groupby word count (rounded to 5)
     - sentence count (clip between 1 and 20)
-    - TODO: count系の特徴量を使う？
-      - spell miss count
 - cv strategy
   - Group K-Fold
     - k: 4
@@ -30,12 +28,12 @@
 - model
   - first statge model (cv=0.5451717268584183)
     - fine tuned deberta v3
-      - inputs: text
+      - inputs: prompt_question, text
   - second stage models
     - XGBoost (cv=0.5168956770838019)
-      - inputs: first stage output, text feature
+      - inputs: first stage output, text stats feature
     - LightGBM (cv=0.5178261265275084)
-      - inputs: first stage output, text feature
+      - inputs: first stage output, text stats feature
   - ensemble
     - simple average of second stage models.
 
@@ -63,3 +61,6 @@
 ## Not worked for me
 
 ## Feature works
+
+- Add feature of preds of roberta base
+- ebad26 (prompt id) is too long title, so cut with max_len

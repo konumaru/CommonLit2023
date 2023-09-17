@@ -93,6 +93,7 @@ def train(cfg: DictConfig) -> None:
     features_dir = pathlib.Path(cfg.path.features)
 
     features = load_feature(features_dir, cfg.features)
+    print(features.shape)
     first_oof = get_first_stage_oof(cfg)
     features = np.concatenate([features, first_oof], axis=1)
 

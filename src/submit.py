@@ -2,9 +2,9 @@ import pathlib
 import re
 from typing import Any, List
 
+import lightgbm as lgb
 import numpy as np
 import pandas as pd
-import torch
 from nltk.corpus import stopwords
 from spellchecker import SpellChecker
 from transformers import AutoModelForSequenceClassification
@@ -56,7 +56,7 @@ def quotes_count(data: pd.DataFrame) -> np.ndarray:
     return results.to_numpy().reshape(-1, 1)
 
 
-def word_overlap_counter(row) -> int:
+def word_overlap_counter(row: pd.Series) -> int:
     STOP_WORDS = set(stopwords.words("english"))  # type: ignore
 
     def check_is_stop_word(word):
@@ -70,7 +70,7 @@ def word_overlap_counter(row) -> int:
     return len(set(prompt_words).intersection(set(summary_words)))
 
 
-def ngram_co_occurrence_counter(row, n: int = 2) -> int:
+def ngram_co_occurrence_counter(row: pd.Series, n: int = 2) -> int:
     def ngrams(token, n):
         ngrams = zip(*[token[i:] for i in range(n)])
         return [" ".join(ngram) for ngram in ngrams]
@@ -107,12 +107,50 @@ def spell_miss_count(data: pd.DataFrame) -> np.ndarray:
     return results.reshape(-1, 1)
 
 
-@torch.no_grad()
-def get_finetuned_model_preds(data: pd.DataFrame) -> np.ndarray:
+def round_to_5(n):
+    return round(n / 5) * 5
+
+
+def target_encoded_word_count(data: pd.DataFrame) -> np.ndarray:
+    _data = data.copy()
+    encoding_map = pd.read_csv(
+        "data/preprocessed/target_encoded_word_count.csv"
+    )
+    f = _data["text"].str.split().str.len()
+    _data["clipped_word_count"] = (
+        pd.Series(f.ravel()).clip(25, 200).apply(round_to_5)
+    )
+
+    _data = pd.merge(_data, encoding_map, on="clipped_word_count", how="left")
+    results = _data[["content", "wording"]].to_numpy()
+    return results
+
+
+def create_features(data: pd.DataFrame) -> np.ndarray:
+    funcs = [
+        text_length,
+        word_count,
+        sentence_count,
+        quoted_sentence_count,
+        consecutive_dots_count,
+        quotes_count,
+        word_overlap_count,
+        spell_miss_count,
+        ngram_co_occurrence_count,
+        target_encoded_word_count,
+    ]
+
+    features = np.concatenate([func(data) for func in funcs], axis=1)
+    return features
+
+
+def get_finetuned_model_preds(
+    data: pd.DataFrame, num_splits: int
+) -> np.ndarray:
     model_dir = pathlib.Path("data/external/finetune-debertav3-training")
 
     preds = []
-    for fold in range(4):
+    for fold in range(num_splits):
         model_path = model_dir / f"finetuned-deberta-v3-base-fold{fold}"
         model = AutoModelForSequenceClassification.from_pretrained(
             model_path, num_labels=2
@@ -125,32 +163,12 @@ def get_finetuned_model_preds(data: pd.DataFrame) -> np.ndarray:
     return np.mean(preds, axis=0)
 
 
-def create_features(data: pd.DataFrame):
-    funcs = [
-        text_length,
-        word_count,
-        sentence_count,
-        quoted_sentence_count,
-        consecutive_dots_count,
-        quotes_count,
-        word_overlap_count,
-        spell_miss_count,
-        ngram_co_occurrence_count,
-    ]
-
-    features_tmp = []
-    for func in funcs:
-        results = func(data)
-        features_tmp.append(results)
-
-    features = np.concatenate(features_tmp, axis=1)
-
-    finetuned_preds = get_finetuned_model_preds(data)
-    features = np.concatenate([features, finetuned_preds], axis=1)
-    return features
+def predict_xgb(X: np.ndarray, models: List[Any]) -> np.ndarray:
+    pred = [model.predict(X) for model in models]
+    return np.mean(pred, axis=0)
 
 
-def predict(X: np.ndarray, models: List[Any]) -> np.ndarray:
+def predict_lgbm(X: np.ndarray, models: List[Any]) -> np.ndarray:
     pred = [model.predict(X) for model in models]
     return np.mean(pred, axis=0)
 
@@ -165,20 +183,39 @@ def main() -> None:
     sample_submission = pd.read_csv(raw_dir / "sample_submission.csv")
 
     test = pd.merge(prompts, summaries, on="prompt_id", how="right")
-    features = create_features(test)
+    text_features = create_features(test)
+    preds_deberta = get_finetuned_model_preds(test, N_FOLD)
+
+    features = np.concatenate([text_features, preds_deberta], axis=1)
 
     for target_name in ["content", "wording"]:
-        model = XGBRegressor()
-        models = []
+        model_xgb = XGBRegressor()
+        models_xgb = []
+
+        models_lgbm = []
+
         for fold in range(N_FOLD):
-            model.load_model(
+            model_xgb.load_model(
                 str(
                     input_dir
                     / f"xgb/seed=42/target={target_name}_fold={fold}.json"
                 )
             )
-            models.append(model)
-        pred = predict(features, models)
+            models_xgb.append(model_xgb)
+
+            model_lgbm = lgb.Booster(
+                model_file=str(
+                    input_dir
+                    / f"lgbm/seed=42/target={target_name}_fold={fold}.txt"
+                )
+            )
+            models_lgbm.append(model_lgbm)
+
+        pred_xgb = predict_xgb(features, models_xgb)
+        pred_lgbm = predict_lgbm(features, models_lgbm)
+
+        pred = (pred_xgb + pred_lgbm) / 2
+
         sample_submission[target_name] = pred
 
     print(sample_submission.head())

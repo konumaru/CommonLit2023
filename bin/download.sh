@@ -53,9 +53,7 @@ download_competition commonlit-evaluate-student-summaries
 
 # Download datasets.
 # download_dataset konumaru/microsoft-deberta-v3-base
-# download_dataset konumaru/commonlit2023-finetuned-debertav3
-
 
 # Download kernels datasets.
-# download_kernels_dataset konumaru/finetune-debertav3
 download_kernels_dataset konumaru/finetune-debertav3-training
+download_kernels_dataset konumaru/finetune-roberta-training
