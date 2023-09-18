@@ -55,8 +55,10 @@
 | 11 | 0.5560561772865491 | 0.479 | add feature of quotes_count |
 | 12 | 0.5451717268584183 | 0.559 | only finetuned deberta base |
 | 13 | 0.5168956770838019 | 0.491 | stacking xgb on deberta |
-| 14 | 0.5162055570275468 |  | ensenble lgbm |
+| 14 | 0.5162055570275468 | -- | ensenble lgbm |
 | 15 | 0.5148750859363870 | 0.465 | add feature of target encoding |
+| 16 | 0.5157331434893387 | 0.467 | refactoring create feature process |
+| 17 | 0.5165902545701605 | -- | change finetuned deberta version ? |
 
 ## Not worked for me
 
@@ -68,3 +70,9 @@
 - change finetuned model inputs
   - inputs: prompt_question, prompt_text, text
 - Add feature of preds of deberta large
+- ensemble
+  - svm
+- tree stage stack
+  - logistic regression
+  - ridge regression
+- topk word embedding

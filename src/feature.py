@@ -128,7 +128,9 @@ class CommonLitFeature(BaseFeature):
         preprocess_dir: str | None = None,
     ) -> None:
         super().__init__(data, use_cache, is_test, feature_dir)
-        self.preprocess_dir = pathlib.Path(preprocess_dir)
+
+        if preprocess_dir:
+            self.preprocess_dir = pathlib.Path("./data/preprocessed")
 
     @BaseFeature.cache()
     def text_length(self) -> np.ndarray:
@@ -189,6 +191,13 @@ class CommonLitFeature(BaseFeature):
 
         results = self.data.apply(counter, axis=1).to_numpy()
         return results.reshape(-1, 1)
+
+    # @BaseFeature.cache()
+    # def triple_dots_count(self) -> np.ndarray:
+    #     cnt = self.data["text"].apply(
+    #         lambda x: len(re.findall(r"\.{3,4}", str(x)))
+    #     )
+    #     return cnt.to_numpy().reshape(-1, 1)
 
     # @BaseFeature.cache()
     # def pos_tag_count(self) -> np.ndarray:
