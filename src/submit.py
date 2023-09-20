@@ -4,6 +4,7 @@ from typing import Any, List
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+from sentence_transformers import SentenceTransformer
 from transformers import AutoModelForSequenceClassification
 from xgboost import XGBRegressor
 
@@ -57,7 +58,12 @@ def main() -> None:
     test = pd.merge(prompts, summaries, on="prompt_id", how="right")
 
     cl_feature = CommonLitFeature(
-        test, is_test=True, preprocess_dir="./data/upload"
+        test,
+        sentence_encoder=SentenceTransformer(
+            "all-MiniLM-L6-v2", device="cuda:0"
+        ),
+        is_test=True,
+        preprocess_dir="./data/upload",
     )
     text_features = cl_feature.create_features()
     preds_deberta = get_finetuned_model_preds(test, N_FOLD)
@@ -66,10 +72,9 @@ def main() -> None:
 
     for target_name in ["content", "wording"]:
         model_xgb = XGBRegressor()
+
         models_xgb = []
-
         models_lgbm = []
-
         for fold in range(N_FOLD):
             model_xgb.load_model(
                 str(

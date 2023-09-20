@@ -141,6 +141,7 @@ data/.hydra/
 *.npy
 *.json
 *.bin
+*.vectors
 
 !data/upload/.gitkeep
 !data/upload/dataset-metadata.json

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from lightgbm import LGBMRegressor
 from omegaconf import DictConfig, OmegaConf
+from sentence_transformers import SentenceTransformer
 from sklearn.ensemble import RandomForestRegressor
 from xgboost import XGBRegressor
 
@@ -96,11 +97,18 @@ def get_first_stage_oof(cfg: DictConfig) -> np.ndarray:
 
 
 def train(cfg: DictConfig) -> None:
-    cl_feature = CommonLitFeature(pd.DataFrame(), feature_dir=cfg.path.feature)
+    cl_feature = CommonLitFeature(
+        pd.DataFrame(),
+        sentence_encoder=SentenceTransformer(
+            "all-MiniLM-L6-v2", device="cuda:0"
+        ),
+        feature_dir=cfg.path.feature,
+    )
     text_features = cl_feature.load_feature()
 
     first_oof = get_first_stage_oof(cfg)
     features = np.concatenate([text_features, first_oof], axis=1)
+    print(features.shape)
 
     features_dir = pathlib.Path(cfg.path.feature)
     folds = load_pickle(features_dir / "fold.pkl").ravel()

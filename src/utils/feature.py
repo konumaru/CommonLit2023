@@ -71,23 +71,25 @@ class BaseFeature:
         self.is_test = is_test
 
         BaseFeature.use_cache = False if is_test else use_cache
-        BaseFeature.save_cache = False if is_test else use_cache
+        BaseFeature.save_cache = False if is_test else True
 
         if feature_dirpath is not None:
             BaseFeature.feature_dir = pathlib.Path(feature_dirpath)
             BaseFeature.feature_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def cache() -> Callable:
+    def cache(use_cache: bool = True) -> Callable:
         def wrapper(func: Callable) -> Callable:
             @functools.wraps(func)
             def run_func(*args, **kwargs) -> Any:
                 save_dir = BaseFeature.feature_dir
-                use_cache = BaseFeature.use_cache
-
                 filepath = os.path.join(save_dir, func.__name__ + ".pkl")
 
-                if use_cache and os.path.exists(filepath):
+                if (
+                    use_cache
+                    and os.path.exists(filepath)
+                    and BaseFeature.use_cache
+                ):
                     print(f"Use cached data, {filepath}")
                     with open(filepath, "rb") as file:
                         data = pickle.load(file)

@@ -49,8 +49,7 @@
 | 6 | 0.4759433370779221 | -- | add feature of tri-gram co-occur words |
 | 7 | 0.4737618975123431 | -- | change xgb n_estimatoers param 500 to 800 |
 | 8 | 0.4744999729694380 | 0.479 | rm featrue of debertav3 prompt embeddings |
-| - | ------------------ | -- | change evaluate mothod |
-| 9 | 0.5576348008005831 | 0.478 | change kfold to group kfold |
+| 9 | 0.5576348008005831 | 0.478 | **change kfold to group kfold** |
 | 10 | 0.5572727558437666 |  | add feature of spell_miss_count |
 | 11 | 0.5560561772865491 | 0.479 | add feature of quotes_count |
 | 12 | 0.5451717268584183 | 0.559 | only finetuned deberta base |
@@ -58,21 +57,17 @@
 | 14 | 0.5162055570275468 | -- | ensenble lgbm |
 | 15 | 0.5148750859363870 | 0.465 | add feature of target encoding |
 | 16 | 0.5157331434893387 | 0.467 | refactoring create feature process |
-| 17 | 0.5165902545701605 | -- | change finetuned deberta version ? |
+| 17 | 0.5114196777076987 | 0.470 | add feature of wv simirality of prompt text and text |
 
 ## Not worked for me
 
 - fine tuned roberta base (cv=0.5809940545327481) as first stage model
   - inputs: prompt_question, text
+- text averaged word2vec
 
 ## Feature works
 
-- change finetuned model inputs
-  - inputs: prompt_question, prompt_text, text
-- Add feature of preds of deberta large
 - ensemble
   - svm
-- tree stage stack
-  - logistic regression
-  - ridge regression
-- topk word embedding
+- refactoring feture engineering
+- sentence vec と word vec を満遍なく学習するNNモデル入れる

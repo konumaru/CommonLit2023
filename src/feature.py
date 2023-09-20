@@ -1,5 +1,6 @@
 import pathlib
 import re
+import statistics
 from typing import List
 
 import hydra
@@ -7,9 +8,13 @@ import nltk
 import numpy as np
 import pandas as pd
 import torch
+from gensim.models import KeyedVectors
 from nltk.corpus import stopwords
+from nltk.tokenize import word_tokenize
 from omegaconf import DictConfig, OmegaConf
 from rich.progress import track
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
 from spellchecker import SpellChecker
 from torch.utils.data import DataLoader
 
@@ -118,10 +123,31 @@ def round_to_5(n):
     return round(n / 5) * 5
 
 
+def analyze_text(text):
+    words = text.split()
+    word_lengths = [len(word) for word in words]
+    # max_length = max(word_lengths)
+    avg_length = sum(word_lengths) / len(word_lengths)
+    median_length = statistics.median(word_lengths)
+    return pd.Series([avg_length, median_length])
+
+
+stop_words = set(stopwords.words("english"))  # type: ignore
+stop_words.add(",")
+stop_words.add(".")
+
+
+def clean_text(text: str) -> str:
+    word_tokens = word_tokenize(text)
+    filtered_sentence = [w for w in word_tokens if not w.lower() in stop_words]
+    return " ".join(filtered_sentence)
+
+
 class CommonLitFeature(BaseFeature):
     def __init__(
         self,
         data: pd.DataFrame,
+        sentence_encoder: SentenceTransformer,
         use_cache: bool = True,
         is_test: bool = False,
         feature_dir: str | None = None,
@@ -130,7 +156,10 @@ class CommonLitFeature(BaseFeature):
         super().__init__(data, use_cache, is_test, feature_dir)
 
         if preprocess_dir:
-            self.preprocess_dir = pathlib.Path("./data/preprocessed")
+            self.preprocess_dir = pathlib.Path(preprocess_dir)
+
+        self.sentence_encoder = sentence_encoder
+        self.sentence_encoder.max_seq_length = 256
 
     @BaseFeature.cache()
     def text_length(self) -> np.ndarray:
@@ -192,6 +221,104 @@ class CommonLitFeature(BaseFeature):
         results = self.data.apply(counter, axis=1).to_numpy()
         return results.reshape(-1, 1)
 
+    @BaseFeature.cache()
+    def target_encoded_word_count(self) -> np.ndarray:
+        _data = self.data.copy()
+        word_cnt = self.word_count().ravel()
+        _data["clipped_word_count"] = (
+            pd.Series(word_cnt).clip(25, 200).apply(round_to_5)
+        )
+
+        if self.is_test:
+            encoding_map = pd.read_csv(
+                self.preprocess_dir / "target_encoded_word_count.csv"
+            )
+            _data = _data.merge(
+                encoding_map, on="clipped_word_count", how="left"
+            )
+            results = _data[["content", "wording"]].to_numpy()
+            return results
+        else:
+            results = (
+                _data.groupby(["fold", "clipped_word_count"])[
+                    ["content", "wording"]
+                ]
+                .transform("mean")
+                .to_numpy()
+            )
+            return results
+
+    # TODO: refactor
+    @BaseFeature.cache()
+    def prompt_text_similarity(self) -> np.ndarray:
+        prompt_ids = self.data["prompt_id"].unique()
+
+        results = np.zeros(self.data.shape[0])
+        for prompt_id in prompt_ids:
+            is_this_prompt = self.data["prompt_id"] == prompt_id
+
+            p_text = (
+                self.data.loc[is_this_prompt, "prompt_text"].unique().tolist()
+            )
+            text = self.data.loc[is_this_prompt, "text"].tolist()
+
+            p_text_vec = self.sentence_encoder.encode(
+                p_text, normalize_embeddings=True
+            )
+            text_vec = self.sentence_encoder.encode(
+                text, normalize_embeddings=True
+            )
+
+            results[is_this_prompt] = cosine_similarity(
+                p_text_vec, text_vec
+            ).ravel()
+        return results.reshape(-1, 1)
+
+    # TODO: refactor
+    @BaseFeature.cache(False)
+    def text_wv(self) -> np.ndarray:
+        filepath = (
+            self.preprocess_dir / "fasttext-wiki-news-subwords-300.vectors"
+        )
+        wv = KeyedVectors.load(str(filepath), mmap="r")
+
+        def get_words_avg_vec(words: List[str]) -> List[float]:
+            vec = []
+            for w in words:
+                try:
+                    vec.append(wv[w])
+                except KeyError:
+                    pass
+            return list(np.mean(vec, axis=0))
+
+        text_words = self.data["text"].apply(clean_text).str.split(" ")
+        text_wv = np.array([get_words_avg_vec(w) for w in text_words])
+
+        prompt_ids = self.data["prompt_id"].unique()
+        results = np.zeros(self.data.shape[0])
+        for prompt_id in prompt_ids:
+            is_this_prompt = self.data["prompt_id"] == prompt_id
+            p_text = (
+                self.data.loc[is_this_prompt, "prompt_text"]
+                .unique()
+                .tolist()[0]
+            )
+            p_text_words = clean_text(p_text).split(" ")
+            p_text_wv = np.array(get_words_avg_vec(p_text_words)).reshape(
+                1, -1
+            )
+
+            results[is_this_prompt] = cosine_similarity(
+                p_text_wv, text_wv[is_this_prompt]
+            ).ravel()
+
+        return results.reshape(-1, 1)
+
+    # @BaseFeature.cache()
+    # def word_stats(self) -> np.ndarray:
+    #     results = self.data["text"].apply(analyze_text)
+    #     return results.to_numpy()
+
     # @BaseFeature.cache()
     # def triple_dots_count(self) -> np.ndarray:
     #     cnt = self.data["text"].apply(
@@ -201,7 +328,6 @@ class CommonLitFeature(BaseFeature):
 
     # @BaseFeature.cache()
     # def pos_tag_count(self) -> np.ndarray:
-    #     # TODO: pos_tagごとに形態素解析させずに処理したら早くなる
     #     pos_tags = [
     #         "NN",
     #         "NNP",
@@ -240,33 +366,6 @@ class CommonLitFeature(BaseFeature):
     #         model_name, self.data["prompt_text"].tolist()
     #     )
     #     return embeddings
-
-    @BaseFeature.cache()
-    def target_encoded_word_count(self) -> np.ndarray:
-        _data = self.data.copy()
-        word_cnt = self.word_count().ravel()
-        _data["clipped_word_count"] = (
-            pd.Series(word_cnt).clip(25, 200).apply(round_to_5)
-        )
-
-        if self.is_test:
-            encoding_map = pd.read_csv(
-                self.preprocess_dir / "target_encoded_word_count.csv"
-            )
-            _data = _data.merge(
-                encoding_map, on="clipped_word_count", how="left"
-            )
-            results = _data[["content", "wording"]].to_numpy()
-            return results
-        else:
-            results = (
-                _data.groupby(["fold", "clipped_word_count"])[
-                    ["content", "wording"]
-                ]
-                .transform("mean")
-                .to_numpy()
-            )
-            return results
 
     # @BaseFeature.cache()
     # def target_encoded_sentence_count(self) -> np.ndarray:
@@ -315,6 +414,9 @@ def main(cfg: DictConfig) -> None:
 
     features = CommonLitFeature(
         train,
+        sentence_encoder=SentenceTransformer(
+            "all-MiniLM-L6-v2", device="cuda:0"
+        ),
         feature_dir=cfg.path.feature,
         preprocess_dir=cfg.path.preprocessed,
     )

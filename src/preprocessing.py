@@ -1,11 +1,22 @@
 import pathlib
 
+import gensim
+import gensim.downloader
 import hydra
 import pandas as pd
 from omegaconf import DictConfig, OmegaConf
 from sklearn.model_selection import GroupKFold
 
 from utils import timer
+
+
+def download_gensim_model(cfg: DictConfig) -> None:
+    output_dir = pathlib.Path(cfg.path.preprocessed)
+    model_name = "fasttext-wiki-news-subwords-300"
+    gensim.downloader.load(model_name)
+
+    vectors = gensim.downloader.load(model_name)
+    vectors.save(output_dir / "fasttext-wiki-news-subwords-300.vectors")  # type: ignore
 
 
 @hydra.main(
@@ -22,7 +33,6 @@ def main(cfg: DictConfig) -> None:
     train = pd.merge(
         prompts_train, summaries_train, on="prompt_id", how="right"
     )
-    # cv = KFold(n_splits=cfg.n_splits, shuffle=True, random_state=42)
     cv = GroupKFold(n_splits=cfg.n_splits)
 
     train = train.assign(fold=0)
@@ -32,6 +42,8 @@ def main(cfg: DictConfig) -> None:
         train.loc[valid_index, "fold"] = fold
 
     train.to_csv(output_dir / "train.csv", index=False)
+
+    # download_gensim_model(cfg)
 
 
 if __name__ == "__main__":
