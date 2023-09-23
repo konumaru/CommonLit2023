@@ -1,28 +1,51 @@
-import pathlib
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
-from transformers import AutoModel, AutoTokenizer
+from transformers import AutoConfig, AutoModel, AutoTokenizer
+
+
+class MCRMSELoss(nn.Module):
+    def __init__(self) -> None:
+        super(MCRMSELoss, self).__init__()
+
+    def forward(
+        self, y_true: torch.Tensor, y_pred: torch.Tensor
+    ) -> torch.Tensor:
+        colwise_mse = torch.mean(torch.square(y_true - y_pred), dim=0)
+        return torch.mean(torch.sqrt(colwise_mse), dim=0)
 
 
 class CommonLitDataset(Dataset):
     def __init__(
         self,
-        input_texts: List[str],
+        data: pd.DataFrame,
         model_name: str,
-        max_len: int = 256,
+        targets: List[str] = ["content", "wording"],
+        max_len: int = 512,
+        is_train: bool = True,
     ) -> None:
-        self.input_texts = input_texts
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.input_texts = (
+            data["prompt_question"]
+            + f" {self.tokenizer.sep_token} "
+            + data["text"]
+        ).tolist()
         self.max_len = max_len
+
+        if is_train:
+            self.targets = torch.from_numpy(data[targets].to_numpy())
+        else:
+            self.targets = torch.zeros((len(data), len(targets)))
 
     def __len__(self) -> int:
         return len(self.input_texts)
 
-    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
+    def __getitem__(
+        self, index: int
+    ) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
         text = self.input_texts[index]
         encoded_token = self.tokenizer(
             text,
@@ -32,72 +55,112 @@ class CommonLitDataset(Dataset):
             return_tensors="pt",
         )
 
-        outputs = {}
-        outputs["input_ids"] = encoded_token[
+        inputs = {}
+        inputs["input_ids"] = encoded_token[
             "input_ids"
         ].squeeze()  # type: ignore
-        outputs["attention_mask"] = encoded_token[
+        inputs["attention_mask"] = encoded_token[
             "attention_mask"
         ].squeeze()  # type: ignore
+        targets = self.targets[index, :]
 
-        return outputs
+        return (inputs, targets)
 
 
-class EmbeddingEncoder(nn.Module):
+class MeanPooling(nn.Module):
+    def __init__(self):
+        super(MeanPooling, self).__init__()
+
+    def forward(self, last_hidden_state, attention_mask):
+        input_mask_expanded = (
+            attention_mask.unsqueeze(-1)
+            .expand(last_hidden_state.size())
+            .float()
+        )
+        sum_embeddings = torch.sum(last_hidden_state * input_mask_expanded, 1)
+        sum_mask = input_mask_expanded.sum(1)
+        sum_mask = torch.clamp(sum_mask, min=1e-9)
+        mean_embeddings = sum_embeddings / sum_mask
+        return mean_embeddings
+
+
+class CommonLitModel(nn.Module):
     def __init__(
         self,
         model_name: str,
-        pooling: str = "mean",
-        device: torch.device = torch.device("cpu"),
+        num_labels: int = 1,
     ) -> None:
-        super(EmbeddingEncoder, self).__init__()
-        self.model = AutoModel.from_pretrained(model_name)
-        self.pooling = pooling
-        self.device = device
+        super().__init__()
+        self.model_name = model_name
+        self.num_labels = num_labels
 
-        for param in self.model.parameters():
-            param.requires_grad = False
-
-    def forward(self, x: Dict[str, torch.Tensor]) -> torch.Tensor:
-        x = {k: v.to(self.device) for k, v in x.items()}
-
-        outputs = self.model(
-            input_ids=x["input_ids"], attention_mask=x["attention_mask"]
+        self.config = AutoConfig.from_pretrained(model_name)
+        self.config.update(
+            {
+                "hidden_dropout_prob": 0.0,
+                "attention_probs_dropout_prob": 0.007,
+            }
         )
+        self.model = AutoModel.from_pretrained(model_name, config=self.config)
 
-        if self.pooling == "mean":
-            mask = x["attention_mask"].clone().detach().unsqueeze(-1)
-            embeddings = (outputs.last_hidden_state * mask).sum(
-                dim=(1)
-            ) / mask.sum(dim=1)
+        self.pooler = MeanPooling()
+        self.head = nn.Linear(self.config.hidden_size, self.num_labels)
 
-        elif self.pooling == "max":
-            embeddings = outputs[0].max(dim=1)[0]
-        else:
-            raise NotImplementedError
+        self.init_model()
 
-        return embeddings
+    def forward(self, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        input_ids = batch["input_ids"]
+        attention_mask = batch["attention_mask"]
+
+        output = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+        output = self.pooler(output.last_hidden_state, attention_mask)
+        output = self.head(output)
+        return output
+
+    def init_model(self) -> None:
+        for i in range(0, 8):
+            for _, param in self.model.encoder.layer[i].named_parameters():
+                param.requires_grad = False
+
+        for layer in self.model.encoder.layer[-2:]:
+            for module in layer.modules():
+                if isinstance(module, nn.Linear):
+                    module.weight.data.normal_(
+                        mean=0.0, std=self.model.config.initializer_range
+                    )
+                    if module.bias is not None:
+                        module.bias.data.zero_()
+                elif isinstance(module, nn.Embedding):
+                    module.weight.data.normal_(
+                        mean=0.0, std=self.model.config.initializer_range
+                    )
+                    if module.padding_idx is not None:
+                        module.weight.data[module.padding_idx].zero_()
+                elif isinstance(module, nn.LayerNorm):
+                    module.bias.data.zero_()
+                    module.weight.data.fill_(1.0)
 
 
 def main() -> None:
-    input_dir = pathlib.Path("./data/raw")
+    data = pd.read_csv("./data/preprocessed/train.csv")
 
-    train = pd.read_csv(input_dir / "summaries_train.csv")
-    print(train.head())
+    model_name = "microsoft/deberta-v3-base"
+    dataset = CommonLitDataset(data, model_name)
+    model = CommonLitModel(model_name, num_labels=2)
 
-    model_name = "bert-base-uncased"
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    dataset = CommonLitDataset(train["text"].tolist(), model_name, 256)
-    dataloader = DataLoader(dataset, batch_size=8, shuffle=False)
-    model = EmbeddingEncoder(model_name, device=device)
-    model.to(device)
+    dataloader = DataLoader(
+        dataset, batch_size=16, shuffle=False, num_workers=8
+    )
+    batch = next(iter(dataloader))
+    z = model(batch)
+    print(z)
 
-    with torch.no_grad():
-        for batch in dataloader:
-            z = model(batch)
-            print(z)
-            print(z.shape)
-            break
+    loss_fn = MCRMSELoss()
+    loss = loss_fn(z, batch["labels"])
+    print(loss)
 
 
 if __name__ == "__main__":

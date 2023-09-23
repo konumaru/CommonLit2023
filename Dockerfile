@@ -18,6 +18,7 @@ RUN pip install -U pip
 RUN pip install black isort mypy pyproject-flake8
 RUN pip install pytest-cov
 RUN pip install iterative-stratification hydra-core
+# NOTE: If install torch, can't import pytorch-lightning
 RUN pip install torch==1.12.0+cu113 torchvision==0.13.0+cu113 torchaudio==0.12.0 -f https://download.pytorch.org/whl/torch_stable.html
 
 RUN pip install pyspellchecker

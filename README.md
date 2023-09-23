@@ -64,10 +64,11 @@
 - fine tuned roberta base (cv=0.5809940545327481) as first stage model
   - inputs: prompt_question, text
 - text averaged word2vec
+- average and median of word length
 
 ## Feature works
 
+- training with deberta large
 - ensemble
   - svm
 - refactoring feture engineering
-- sentence vec と word vec を満遍なく学習するNNモデル入れる

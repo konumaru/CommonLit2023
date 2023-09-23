@@ -1,6 +1,6 @@
 import os
 import pathlib
-from typing import Dict
+import warnings
 
 import hydra
 import numpy as np
@@ -8,79 +8,29 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from omegaconf import DictConfig, OmegaConf
-from sklearn.metrics import mean_squared_error
 from torch.utils.data import DataLoader, Dataset
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    Trainer,
-    TrainingArguments,
-)
 
 from metric import mcrmse
+from models import CommonLitDataset, CommonLitModel, MCRMSELoss
+from models.trainer import PytorchTrainer
 from utils import timer
 
+warnings.simplefilter("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-
-class CommonLitDataset(Dataset):
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        target: str,
-        model_name: str,
-        max_len: int = 256,
-        is_train: bool = True,
-    ) -> None:
-        self.input_texts = data["text"].tolist()
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.max_len = max_len
-
-        if is_train:
-            self.targets = torch.from_numpy(data[target].to_numpy())
-        else:
-            self.targets = torch.zeros((len(data), 1))
-
-    def __len__(self) -> int:
-        return len(self.input_texts)
-
-    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
-        text = self.input_texts[index]
-        encoded_token = self.tokenizer(
-            text,
-            padding="max_length",
-            max_length=self.max_len,
-            truncation=True,
-            return_tensors="pt",
-        )
-
-        outputs = {}
-        outputs["input_ids"] = encoded_token[
-            "input_ids"
-        ].squeeze()  # type: ignore
-        outputs["attention_mask"] = encoded_token[
-            "attention_mask"
-        ].squeeze()  # type: ignore
-        outputs["labels"] = self.targets[index]
-
-        return outputs
-
-
-def compute_metrics(eval_pred):
-    predictions, labels = eval_pred
-    rmse = mean_squared_error(labels, predictions, squared=False)
-    return {"rmse": rmse}
+torch.set_float32_matmul_precision("high")
 
 
 @torch.no_grad()
 def predict(model: nn.Module, dataset: Dataset) -> np.ndarray:
-    dataloader = DataLoader(dataset, batch_size=16, shuffle=False)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    dataloader = DataLoader(
+        dataset, batch_size=16, shuffle=False, num_workers=8
+    )
 
-    preds = []
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     model.to(device)
     model.eval()
+    preds = []
     for batch in dataloader:
         batch = {k: v.to(device) for k, v in batch.items()}
         z = model(
@@ -89,8 +39,8 @@ def predict(model: nn.Module, dataset: Dataset) -> np.ndarray:
         )
         preds.append(z.logits.detach().cpu().numpy())
 
-    preds_all = np.concatenate(preds, axis=0)
-    return preds_all
+    results = np.concatenate(preds, axis=0)
+    return results
 
 
 @hydra.main(
@@ -100,101 +50,59 @@ def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
     input_dir = pathlib.Path(cfg.path.preprocessed)
+    model_dir = pathlib.Path(cfg.path.model) / "deberta-v3-base"
 
     data = pd.read_csv(input_dir / "train.csv")
-
-    # --- train ---
-    for target in ["content", "wording"]:
-        for fold in range(cfg.n_splits):
-            print(f"Fold: {fold}")
-            train_dataset = CommonLitDataset(
-                data.query(f"fold!={fold}"),
-                target,
-                "microsoft/deberta-v3-base",
-            )
-            valid_dataset = CommonLitDataset(
-                data.query(f"fold=={fold}"),
-                target,
-                "microsoft/deberta-v3-base",
-            )
-
-            model = AutoModelForSequenceClassification.from_pretrained(
-                "microsoft/deberta-v3-base", num_labels=1
-            )
-
-            output_dir = (
-                f"./data/train/finetuned-deberta-v3-base-{target}-fold{fold}"
-            )
-            training_args = TrainingArguments(
-                output_dir=output_dir,
-                overwrite_output_dir=True,
-                load_best_model_at_end=True,
-                report_to="none",  # type: ignore
-                greater_is_better=False,
-                num_train_epochs=1,
-                per_device_train_batch_size=16,
-                per_device_eval_batch_size=16,
-                learning_rate=1.5e-5,
-                weight_decay=0.02,
-                seed=cfg.seed,
-                metric_for_best_model="rmse",
-                save_strategy="steps",
-                evaluation_strategy="steps",
-                eval_steps=1,
-                save_steps=1,
-                save_total_limit=1,
-            )
-
-            trainer = Trainer(
-                model=model,
-                args=training_args,
-                train_dataset=train_dataset,
-                eval_dataset=valid_dataset,
-                compute_metrics=compute_metrics,  # type: ignore
-            )
-
-            trainer.train()
-
-            save_model_dir = (
-                f"./data/model/finetuned-deberta-v3-base-{target}-fold{fold}"
-            )
-            model.save_pretrained(save_model_dir)
-
-    # --- predict ---
     data[["pred_content", "pred_wording"]] = 0.0
-    for fold in range(cfg.n_splits):
-        for target in ["content", "wording"]:
-            valid_dataset = CommonLitDataset(
-                data.query(f"fold=={fold}"),
-                target,
-                "microsoft/deberta-v3-base",
-            )
-            # save_model_dir = (
-            #     f"./data/model/finetuned-deberta-v3-base-{target}-fold{fold}"
-            # )
 
-            external_dir = pathlib.Path(
-                f"data/external/finetune-debertav3-fold-{fold}"
-            )
-            save_model_dir = (
-                external_dir / f"finetuned-deberta-v3-base-{target}-fold{fold}"
-            )
-            model = AutoModelForSequenceClassification.from_pretrained(
-                save_model_dir, num_labels=1
-            )
-            pred = predict(model, valid_dataset)
-            data.loc[data["fold"] == fold, f"pred_{target}"] = pred
+    model_name = "microsoft/deberta-v3-base"
+    # model_name = "microsoft/deberta-v3-large"
+
+    for fold in range(cfg.n_splits):
+        print(f"Fold: {fold}")
+        model = CommonLitModel(model_name, num_labels=2)
+        train_dataset = CommonLitDataset(
+            data.query(f"fold!={fold}"), model_name, max_len=512
+        )
+        valid_dataset = CommonLitDataset(
+            data.query(f"fold=={fold}"), model_name, max_len=512
+        )
+        train_dataloader = DataLoader(
+            train_dataset, batch_size=8, shuffle=True, drop_last=True
+        )
+        valid_dataloader = DataLoader(
+            valid_dataset, batch_size=8, shuffle=False
+        )
+        optimizer = torch.optim.AdamW(
+            model.parameters(), lr=1e-4, weight_decay=0.02
+        )
+
+        trainer = PytorchTrainer(
+            work_dir=str(model_dir / f"fold{fold}"),
+            model=model,
+            criterion=MCRMSELoss(),
+            eval_metric=MCRMSELoss(),
+            train_dataloader=train_dataloader,
+            valid_dataloader=valid_dataloader,
+            optimizer=optimizer,
+            save_interval="batch",
+            max_epochs=4,
+            every_eval_steps=50,
+        )
+        trainer.train()
+        trainer.load_best_model()
+
+        pred = trainer.predict(valid_dataloader)
+        data.loc[data["fold"] == fold, ["pred_content", "pred_wording"]] = pred
 
     score = mcrmse(
         data[["content", "wording"]].to_numpy(),
         data[["pred_content", "pred_wording"]].to_numpy(),
     )
-
-    output_dir = pathlib.Path(cfg.path.train)
-    data[["pred_content", "pred_wording"]].to_csv(
-        output_dir / "first_stage_pred.csv", index=False
-    )
-    print(score)
+    print(f"Score: {score}")
+    data[
+        ["prompt_id", "student_id", "fold", "pred_content", "pred_wording"]
+    ].to_csv(str(model_dir / "oof.csv"), index=False)
 
 
 if __name__ == "__main__":
