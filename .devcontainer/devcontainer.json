@@ -50,7 +50,10 @@
     "python.linting.flake8Enabled": true,
     "python.linting.cwd": "${workspaceFolder}",
     "python.linting.flake8Path": "/opt/conda/bin/pflake8",
-    "python.linting.flake8Args": ["--max-line-length=79"],
+    "python.linting.flake8Args": [
+      "--max-line-length=79",
+      "--ignore=E203,W503,F401,F841,W605"
+    ],
     "python.linting.mypyEnabled": true,
     "python.linting.mypyPath": "/opt/conda/bin/mypy",
     "python.formatting.blackArgs": ["--line-length", "79"],

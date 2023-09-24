@@ -11,9 +11,10 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
 
 from metric import mcrmse
-from models import CommonLitDataset, CommonLitModel, MCRMSELoss, torch_fix_seed
+from models import CommonLitDataset, CommonLitModel, MCRMSELoss
 from models.trainer import PytorchTrainer
-from utils import timer
+from utils import seed_everything, timer
+from utils.io import save_txt
 
 warnings.simplefilter("ignore")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -48,7 +49,7 @@ def get_optimizer(model: nn.Module):
         {
             "params": [p for n, p in model.named_parameters() if "head" in n],
             "weight_decay": 0.01,
-            "lr": 1e-3,
+            "lr": 3e-4,
         }
     ]
 
@@ -56,8 +57,7 @@ def get_optimizer(model: nn.Module):
     layers = [getattr(model, "model").embeddings] + list(
         getattr(model, "model").encoder.layer
     )
-    layers.reverse()
-    for layer in layers:
+    for layer in layers[-4:]:
         optimizer_grouped_parameters += [
             {
                 "params": [
@@ -80,7 +80,7 @@ def get_optimizer(model: nn.Module):
         ]
 
     return torch.optim.AdamW(
-        optimizer_grouped_parameters, lr=1e-4, weight_decay=0.02
+        optimizer_grouped_parameters, lr=1e-5, weight_decay=0.02
     )
 
 
@@ -90,7 +90,7 @@ def get_optimizer(model: nn.Module):
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
 
-    torch_fix_seed(cfg.seed)
+    seed_everything(cfg.seed)
 
     input_dir = pathlib.Path(cfg.path.preprocessed)
     model_dir = pathlib.Path(cfg.path.model) / "deberta-v3-base"
@@ -111,10 +111,10 @@ def main(cfg: DictConfig) -> None:
             data.query(f"fold=={fold}"), model_name, max_len=512
         )
         train_dataloader = DataLoader(
-            train_dataset, batch_size=8, shuffle=True, drop_last=True
+            train_dataset, batch_size=12, shuffle=True, drop_last=True
         )
         valid_dataloader = DataLoader(
-            valid_dataset, batch_size=8, shuffle=False
+            valid_dataset, batch_size=12, shuffle=False
         )
         optimizer = get_optimizer(model)
 
@@ -130,7 +130,7 @@ def main(cfg: DictConfig) -> None:
         trainer.train(
             max_epochs=4,
             save_interval="batch",
-            every_eval_steps=50,
+            every_eval_steps=20,
         )
         trainer.load_best_model()
 
@@ -142,6 +142,11 @@ def main(cfg: DictConfig) -> None:
         data[["pred_content", "pred_wording"]].to_numpy(),
     )
     print(f"Score: {score}")
+    save_txt(
+        str(model_dir / "score.txt"),
+        str(score),
+    )
+
     data[
         ["prompt_id", "student_id", "fold", "pred_content", "pred_wording"]
     ].to_csv(str(model_dir / "oof.csv"), index=False)

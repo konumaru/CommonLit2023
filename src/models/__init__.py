@@ -1,24 +1,10 @@
-import random
 from typing import Dict, List, Tuple
 
-import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoConfig, AutoModel, AutoTokenizer
-
-
-def torch_fix_seed(seed=42):
-    # Python random
-    random.seed(seed)
-    # Numpy
-    np.random.seed(seed)
-    # Pytorch
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True  # type: ignore
-    torch.use_deterministic_algorithms = True
 
 
 class MCRMSELoss(nn.Module):
@@ -47,6 +33,7 @@ class CommonLitDataset(Dataset):
             + f" {self.tokenizer.sep_token} "
             + data["text"]
         ).tolist()
+        self.prompt_q = data["prompt_question"].tolist()
         self.max_len = max_len
 
         if is_train:
@@ -116,9 +103,13 @@ class CommonLitModel(nn.Module):
             }
         )
         self.model = AutoModel.from_pretrained(model_name, config=self.config)
-
         self.pooler = MeanPooling()
-        self.head = nn.Linear(self.config.hidden_size, self.num_labels)
+
+        self.head = nn.Sequential(
+            nn.Linear(self.config.hidden_size, 512),
+            nn.GELU(),
+            nn.Linear(512, self.num_labels),
+        )
 
         self.init_model()
 
@@ -135,11 +126,11 @@ class CommonLitModel(nn.Module):
         return output
 
     def init_model(self) -> None:
-        for i in range(0, 8):
+        for i in range(0, 6):
             for _, param in self.model.encoder.layer[i].named_parameters():
                 param.requires_grad = False
 
-        for layer in self.model.encoder.layer[-2:]:
+        for layer in self.model.encoder.layer[-4:]:
             for module in layer.modules():
                 if isinstance(module, nn.Linear):
                     module.weight.data.normal_(
@@ -169,6 +160,7 @@ def main() -> None:
         dataset, batch_size=16, shuffle=False, num_workers=8
     )
     inputs, targets = next(iter(dataloader))
+    print(inputs)
     z = model(inputs)
     print(z)
 

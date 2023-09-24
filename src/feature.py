@@ -1,6 +1,7 @@
 import pathlib
 import re
 import statistics
+import string
 from typing import List
 
 import hydra
@@ -20,6 +21,10 @@ from utils.feature import BaseFeature, feature
 from utils.io import load_pickle
 
 FEATURE_DIR = "./data/feature"
+
+stop_words = set(stopwords.words("english"))  # type: ignore
+stop_words.add(",")
+stop_words.add(".")
 
 
 @feature(FEATURE_DIR)
@@ -107,14 +112,11 @@ def analyze_text(text):
     return pd.Series([avg_length, median_length])
 
 
-stop_words = set(stopwords.words("english"))  # type: ignore
-stop_words.add(",")
-stop_words.add(".")
-
-
 def clean_text(text: str) -> str:
     word_tokens = word_tokenize(text)
-    filtered_sentence = [w for w in word_tokens if not w.lower() in stop_words]
+    filtered_sentence = [
+        w.lower() for w in word_tokens if not w.lower() in stop_words
+    ]
     return " ".join(filtered_sentence)
 
 
@@ -135,6 +137,8 @@ class CommonLitFeature(BaseFeature):
 
         self.sentence_encoder = sentence_encoder
         self.sentence_encoder.max_seq_length = 256
+
+        self.stop_words = set(stopwords.words("english"))  # type: ignore
 
     @BaseFeature.cache()
     def text_length(self) -> np.ndarray:
@@ -193,8 +197,24 @@ class CommonLitFeature(BaseFeature):
             words = row["text"].split(" ")
             return len(SpellChecker().unknown(words))
 
-        results = self.data.apply(counter, axis=1).to_numpy()
-        return results.reshape(-1, 1)
+        results = self.data.apply(counter, axis=1)
+        return results.to_numpy().reshape(-1, 1)
+
+    @BaseFeature.cache()
+    def num_punctuations(self) -> np.ndarray:
+        results = self.data["text"].apply(
+            lambda x: len([c for c in str(x) if c in list(string.punctuation)])
+        )
+        return results.to_numpy().reshape(-1, 1)
+
+    @BaseFeature.cache()
+    def num_stopwords(self) -> np.ndarray:
+        results = self.data["text"].apply(
+            lambda x: len(
+                [w for w in str(x).lower().split() if w in self.stop_words]
+            )
+        )
+        return results.to_numpy().reshape(-1, 1)
 
     @BaseFeature.cache()
     def target_encoded_word_count(self) -> np.ndarray:

@@ -46,7 +46,7 @@ class PytorchTrainer:
         if os.path.exists(log_filepath):
             os.remove(log_filepath)
 
-        logger = logging.getLogger("TrainLogger")
+        logger = logging.getLogger("Training")
         logger.setLevel(logging.INFO)
 
         format = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
@@ -72,6 +72,7 @@ class PytorchTrainer:
 
         preds_all = torch.cat(preds, dim=0)
         targets_all = torch.cat(targets, dim=0)
+        # TODO: 複数のmetricを辞書型で保存して、train関数内でmetricに応じたbest scoreを保存する。
         score = self.eval_metric(preds_all, targets_all)
         return score.item()
 

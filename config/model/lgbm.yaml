@@ -6,5 +6,6 @@ params:
   learning_rate: 0.02
   max_depth: 4
   objective: regression
+  metric: rmse
   subsample: 0.8
   colsample_bytree: 1.0

@@ -81,10 +81,11 @@ def fit_lgbm(
 
 
 def get_first_stage_oof(cfg: DictConfig) -> np.ndarray:
-    external_output_dir = pathlib.Path(cfg.path.model)
+    external_output_dir = pathlib.Path(cfg.path.external)
 
     filepaths = [
-        "deberta-v3-base/oof.csv",
+        # "deberta-v3-base/oof.csv",
+        "finetune-debertav3-training/oof.csv",
         # "finetune-roberta-training/oof.csv",
     ]
 
