@@ -7,18 +7,14 @@ import hydra
 import nltk
 import numpy as np
 import pandas as pd
-import torch
 from gensim.models import KeyedVectors
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from omegaconf import DictConfig, OmegaConf
-from rich.progress import track
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 from spellchecker import SpellChecker
-from torch.utils.data import DataLoader
 
-from models import CommonLitDataset
 from utils import timer
 from utils.feature import BaseFeature, feature
 from utils.io import load_pickle
@@ -96,27 +92,6 @@ def pos_tag_counter(row: pd.Series, pos: str) -> int:
     words = [word for word in words if len(word) > 0]
     tags = nltk.pos_tag(words)
     return len([tag for word, tag in tags if tag == pos])
-
-
-def encode_embedding(model_name: str, input_texts: List[str]) -> np.ndarray:
-    dataset = CommonLitDataset(input_texts, model_name, max_len=512)
-    dataloader = DataLoader(
-        dataset, batch_size=64, shuffle=False, num_workers=8
-    )
-
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model = EmbeddingEncoder(model_name, device=device)
-
-    model.to(device)
-    model.eval()
-    with torch.no_grad():
-        embeddings_batch = []
-        for batch in track(dataloader):
-            z = model(batch)
-            embeddings_batch.append(z.detach().cpu().numpy())
-        embeddings = np.concatenate(embeddings_batch, axis=0)
-
-    return embeddings
 
 
 def round_to_5(n):
@@ -313,78 +288,6 @@ class CommonLitFeature(BaseFeature):
             ).ravel()
 
         return results.reshape(-1, 1)
-
-    # @BaseFeature.cache()
-    # def word_stats(self) -> np.ndarray:
-    #     results = self.data["text"].apply(analyze_text)
-    #     return results.to_numpy()
-
-    # @BaseFeature.cache()
-    # def triple_dots_count(self) -> np.ndarray:
-    #     cnt = self.data["text"].apply(
-    #         lambda x: len(re.findall(r"\.{3,4}", str(x)))
-    #     )
-    #     return cnt.to_numpy().reshape(-1, 1)
-
-    # @BaseFeature.cache()
-    # def pos_tag_count(self) -> np.ndarray:
-    #     pos_tags = [
-    #         "NN",
-    #         "NNP",
-    #         "NNS",
-    #         "PRP",
-    #         "VB",
-    #         "VBD",
-    #         "VBG",
-    #         "VBN",
-    #         "VBP",
-    #         "VBZ",
-    #         "JJ",
-    #         "JJR",
-    #         "JJS",
-    #         "RB",
-    #         "UH",
-    #         "CD",
-    #     ]
-    #     pos_tags_cnt = [
-    #         self.data.apply(pos_tag_counter, axis=1, args=(pos,))
-    #         for pos in pos_tags
-    #     ]
-    #     results = pd.concat(pos_tags_cnt, axis=1).to_numpy()
-    #     return results
-
-    # @BaseFeature.cache()
-    # def deberta_text_embeddings(self) -> np.ndarray:
-    #     model_name = "microsoft/deberta-v3-base"
-    #     embeddings = encode_embedding(model_name, self.data["text"].tolist())
-    #     return embeddings
-
-    # @BaseFeature.cache()
-    # def deberta_prompt_embeddings(self) -> np.ndarray:
-    #     model_name = "microsoft/deberta-v3-base"
-    #     embeddings = encode_embedding(
-    #         model_name, self.data["prompt_text"].tolist()
-    #     )
-    #     return embeddings
-
-    # @BaseFeature.cache()
-    # def target_encoded_sentence_count(self) -> np.ndarray:
-    #     _data = self.data.copy()
-    #     f = load_pickle("data/feature/sentence_count.pkl")
-    #     _data["sentence_count"] = pd.Series(f.ravel()).clip(None, 20)
-    #     results = (
-    #         _data.groupby(["fold", "sentence_count"])[["content", "wording"]]
-    #         .transform("mean")
-    #         .to_numpy()
-    #     )
-    #     encoding_map = _data.groupby(["sentence_count"])[
-    #         ["content", "wording"]
-    #     ].mean()
-
-    #     encoding_map.to_csv(
-    #         "data/preprocessed/target_encoded_sentence_count.csv"
-    #     )
-    #     return results
 
 
 def create_target_encoding_map(cfg: DictConfig, data: pd.DataFrame) -> None:
