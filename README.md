@@ -30,9 +30,9 @@
     - fine tuned deberta v3 base (cv=0.5451717268584183)
       - inputs: prompt_question, text
   - second stage models
-    - XGBoost (cv=0.5168956770838019)
+    - XGBoost (cv=0.5222257984694146)
       - inputs: first stage output, text stats feature
-    - LightGBM (cv=0.5178261265275084)
+    - LightGBM (cv=0.5239820553996042)
       - inputs: first stage output, text stats feature
   - ensemble
     - simple average of second stage models.
@@ -68,7 +68,8 @@
 
 ## Feature works
 
-- training with deberta large
+- add faeture to nn model inputs
+  - w2v
 - ensemble
   - svm
 - refactoring feture engineering

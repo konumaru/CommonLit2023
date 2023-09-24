@@ -11,7 +11,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
 
 from metric import mcrmse
-from models import CommonLitDataset, CommonLitModel, MCRMSELoss
+from models import CommonLitDataset, CommonLitModel, MCRMSELoss, torch_fix_seed
 from models.trainer import PytorchTrainer
 from utils import timer
 
@@ -43,11 +43,54 @@ def predict(model: nn.Module, dataset: Dataset) -> np.ndarray:
     return results
 
 
+def get_optimizer(model: nn.Module):
+    optimizer_grouped_parameters = [
+        {
+            "params": [p for n, p in model.named_parameters() if "head" in n],
+            "weight_decay": 0.01,
+            "lr": 1e-3,
+        }
+    ]
+
+    no_decay = ["bias", "LayerNorm.weight"]
+    layers = [getattr(model, "model").embeddings] + list(
+        getattr(model, "model").encoder.layer
+    )
+    layers.reverse()
+    for layer in layers:
+        optimizer_grouped_parameters += [
+            {
+                "params": [
+                    p
+                    for n, p in layer.named_parameters()
+                    if not any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.02,
+                "lr": 1e-4,
+            },
+            {
+                "params": [
+                    p
+                    for n, p in layer.named_parameters()
+                    if any(nd in n for nd in no_decay)
+                ],
+                "weight_decay": 0.0,
+                "lr": 1e-4,
+            },
+        ]
+
+    return torch.optim.AdamW(
+        optimizer_grouped_parameters, lr=1e-4, weight_decay=0.02
+    )
+
+
 @hydra.main(
     config_path="../config", config_name="config.yaml", version_base="1.3"
 )
 def main(cfg: DictConfig) -> None:
     print(OmegaConf.to_yaml(cfg))
+
+    torch_fix_seed(cfg.seed)
 
     input_dir = pathlib.Path(cfg.path.preprocessed)
     model_dir = pathlib.Path(cfg.path.model) / "deberta-v3-base"
@@ -73,9 +116,7 @@ def main(cfg: DictConfig) -> None:
         valid_dataloader = DataLoader(
             valid_dataset, batch_size=8, shuffle=False
         )
-        optimizer = torch.optim.AdamW(
-            model.parameters(), lr=1e-4, weight_decay=0.02
-        )
+        optimizer = get_optimizer(model)
 
         trainer = PytorchTrainer(
             work_dir=str(model_dir / f"fold{fold}"),
@@ -85,11 +126,12 @@ def main(cfg: DictConfig) -> None:
             train_dataloader=train_dataloader,
             valid_dataloader=valid_dataloader,
             optimizer=optimizer,
-            save_interval="batch",
+        )
+        trainer.train(
             max_epochs=4,
+            save_interval="batch",
             every_eval_steps=50,
         )
-        trainer.train()
         trainer.load_best_model()
 
         pred = trainer.predict(valid_dataloader)

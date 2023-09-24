@@ -18,7 +18,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from spellchecker import SpellChecker
 from torch.utils.data import DataLoader
 
-from models import CommonLitDataset, EmbeddingEncoder
+from models import CommonLitDataset
 from utils import timer
 from utils.feature import BaseFeature, feature
 from utils.io import load_pickle

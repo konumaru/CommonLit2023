@@ -1,10 +1,24 @@
+import random
 from typing import Dict, List, Tuple
 
+import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 from transformers import AutoConfig, AutoModel, AutoTokenizer
+
+
+def torch_fix_seed(seed=42):
+    # Python random
+    random.seed(seed)
+    # Numpy
+    np.random.seed(seed)
+    # Pytorch
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.backends.cudnn.deterministic = True  # type: ignore
+    torch.use_deterministic_algorithms = True
 
 
 class MCRMSELoss(nn.Module):
@@ -154,12 +168,12 @@ def main() -> None:
     dataloader = DataLoader(
         dataset, batch_size=16, shuffle=False, num_workers=8
     )
-    batch = next(iter(dataloader))
-    z = model(batch)
+    inputs, targets = next(iter(dataloader))
+    z = model(inputs)
     print(z)
 
     loss_fn = MCRMSELoss()
-    loss = loss_fn(z, batch["labels"])
+    loss = loss_fn(z, targets)
     print(loss)
 
 
