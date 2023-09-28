@@ -59,7 +59,7 @@
 | 16 | 0.5157331434893387 | 0.467 | refactoring create feature process |
 | 17 | 0.5114196777076987 | 0.470 | add feature of wv simirality of prompt text and text |
 | 18 | 0.5097619287866334 | - | add feature of some text stats |
-| 19 | 0.509488368861999 | - | add feature of glove vec simirality |
+| 19 | 0.509488368861999 | 0.467 | add feature of glove vec simirality |
 
 ## Not worked for me
 
