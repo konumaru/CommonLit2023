@@ -68,8 +68,4 @@
 - text averaged word2vec
 - average and median of word length
 - text length per sentence
-
-## Feature works
-
-- add feature to deberta, prompt question embedding
-  - not as a inpuids seq, use sentence transformer
+- training deberta each other prompt and summary

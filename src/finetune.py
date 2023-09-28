@@ -11,7 +11,9 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
 
 from metric import mcrmse
-from models import CommonLitDataset, CommonLitModel, MCRMSELoss
+from models import CommonLitModel
+from models.dataset import CommonLitDataset
+from models.metrics import MCRMSELoss
 from models.trainer import PytorchTrainer
 from utils import seed_everything, timer
 from utils.io import save_txt
@@ -33,10 +35,11 @@ def predict(model: nn.Module, dataset: Dataset) -> np.ndarray:
     model.eval()
     preds = []
     for batch in dataloader:
-        batch = {k: v.to(device) for k, v in batch.items()}
+        inputs = batch[0]
+        inputs = {k: v.to(device) for k, v in inputs.items()}
         z = model(
-            input_ids=batch["input_ids"],
-            attention_mask=batch["attention_mask"],
+            input_ids=inputs["input_ids"],
+            attention_mask=inputs["attention_mask"],
         )
         preds.append(z.logits.detach().cpu().numpy())
 
@@ -129,12 +132,6 @@ def main(cfg: DictConfig) -> None:
             optimizer=optimizer,
         )
 
-        # if fold != 5:
-        #     # trainer.model.load_state_dict(
-        #     # torch.load(str(model_dir / f"fold{fold}/best_model.pth"))
-        #     # )
-        #     pass
-        # else:
         trainer.train(
             max_epochs=4,
             save_interval="batch",

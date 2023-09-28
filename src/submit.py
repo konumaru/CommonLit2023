@@ -1,70 +1,17 @@
 import pathlib
-from typing import Any, Dict, List
+from typing import Any, List
 
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
-import torch
 from sentence_transformers import SentenceTransformer
-from torch.utils.data import DataLoader, Dataset
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    DataCollatorWithPadding,
-)
+from transformers import AutoModelForSequenceClassification
 from xgboost import XGBRegressor
 
 from feature import CommonLitFeature
 from finetune import predict as predict_finetuned_model
+from models.dataset import CommonLitDataset
 from utils import timer
-
-
-class CommonLitDataset(Dataset):
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        model_name: str,
-        targets: List[str] = ["content", "wording"],
-        max_len: int = 512,
-        is_train: bool = True,
-    ) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.input_texts = (
-            data["prompt_question"]
-            + f" {self.tokenizer.sep_token} "
-            + data["text"]
-        ).tolist()
-        self.max_len = max_len
-        self.data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
-
-        if is_train:
-            self.targets = torch.from_numpy(data[targets].to_numpy())
-        else:
-            self.targets = torch.zeros((len(data), len(targets)))
-
-    def __len__(self) -> int:
-        return len(self.input_texts)
-
-    def __getitem__(self, index: int) -> Dict[str, torch.Tensor]:
-        text = self.input_texts[index]
-        encoded_token = self.tokenizer(
-            text,
-            padding="max_length",
-            max_length=self.max_len,
-            truncation=True,
-            return_tensors="pt",
-        )
-
-        outputs = {}
-        outputs["input_ids"] = encoded_token[
-            "input_ids"
-        ].squeeze()  # type: ignore
-        outputs["attention_mask"] = encoded_token[
-            "attention_mask"
-        ].squeeze()  # type: ignore
-        outputs["labels"] = self.targets[index, :]
-
-        return outputs
 
 
 def get_finetuned_model_preds(
@@ -74,15 +21,16 @@ def get_finetuned_model_preds(
 
     preds = []
     for fold in range(num_splits):
-        model_path = model_dir / f"finetuned-deberta-v3-base-fold{fold}"
-        model = AutoModelForSequenceClassification.from_pretrained(
-            model_path, num_labels=2
-        )
         dataset = CommonLitDataset(
             data,
             "microsoft/deberta-v3-base",
             max_len=512,
             is_train=False,
+        )
+
+        model_path = model_dir / f"finetuned-deberta-v3-base-fold{fold}"
+        model = AutoModelForSequenceClassification.from_pretrained(
+            model_path, num_labels=2
         )
         pred = predict_finetuned_model(model, dataset)
         preds.append(pred)

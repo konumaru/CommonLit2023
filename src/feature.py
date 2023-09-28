@@ -243,19 +243,18 @@ class CommonLitFeature(BaseFeature):
             )
             return results
 
-    # TODO: refactor
-    @BaseFeature.cache()
+    @BaseFeature.cache(False)
     def prompt_text_similarity(self) -> np.ndarray:
-        prompt_ids = self.data["prompt_id"].unique()
-
         results = np.zeros(self.data.shape[0])
-        for prompt_id in prompt_ids:
+        for prompt_id in self.data["prompt_id"].unique():
             is_this_prompt = self.data["prompt_id"] == prompt_id
 
             p_text = (
-                self.data.loc[is_this_prompt, "prompt_text"].unique().tolist()
+                self.data.query("prompt_id == @prompt_id")["prompt_text"]
+                .unique()
+                .tolist()[0]
             )
-            text = self.data.loc[is_this_prompt, "text"].tolist()
+            text = self.data.query("prompt_id == @prompt_id")["text"].tolist()
 
             p_text_vec = self.sentence_encoder.encode(
                 p_text, normalize_embeddings=True
@@ -265,14 +264,13 @@ class CommonLitFeature(BaseFeature):
             )
 
             results[is_this_prompt] = cosine_similarity(
-                p_text_vec, text_vec
+                [p_text_vec], text_vec  # type: ignore
             ).ravel()
         return results.reshape(-1, 1)
 
-    # TODO: refactor
-    @BaseFeature.cache()
+    @BaseFeature.cache(False)
     def text_wv(self) -> np.ndarray:
-        def get_words_avg_vec(words: List[str]) -> List[float]:
+        def get_words_avg_vec(wv, words: List[str]) -> List[float]:
             vec = []
             for w in words:
                 try:
@@ -291,21 +289,20 @@ class CommonLitFeature(BaseFeature):
             wv = KeyedVectors.load(str(filepath), mmap="r")
 
             text_words = self.data["text"].apply(clean_text).str.split(" ")
-            text_wv = np.array([get_words_avg_vec(w) for w in text_words])
+            text_wv = np.array([get_words_avg_vec(wv, w) for w in text_words])
 
-            prompt_ids = self.data["prompt_id"].unique()
             results = np.zeros(self.data.shape[0])
-            for prompt_id in prompt_ids:
+            for prompt_id in self.data["prompt_id"].unique():
                 is_this_prompt = self.data["prompt_id"] == prompt_id
                 p_text = (
-                    self.data.loc[is_this_prompt, "prompt_text"]
+                    self.data.query("prompt_id == @prompt_id")["prompt_text"]
                     .unique()
                     .tolist()[0]
                 )
                 p_text_words = clean_text(p_text).split(" ")
-                p_text_wv = np.array(get_words_avg_vec(p_text_words)).reshape(
-                    1, -1
-                )
+                p_text_wv = np.array(
+                    get_words_avg_vec(wv, p_text_words)
+                ).reshape(1, -1)
 
                 results[is_this_prompt] = cosine_similarity(
                     p_text_wv, text_wv[is_this_prompt]

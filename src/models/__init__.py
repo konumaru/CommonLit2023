@@ -1,97 +1,13 @@
-from typing import Dict, List, Tuple
+from typing import Dict
 
 import pandas as pd
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, Dataset
-from transformers import AutoConfig, AutoModel, AutoTokenizer
+from torch.utils.data import DataLoader
+from transformers import AutoConfig, AutoModel
 
-
-class MCRMSELoss(nn.Module):
-    def __init__(self) -> None:
-        super(MCRMSELoss, self).__init__()
-
-    def forward(
-        self, y_true: torch.Tensor, y_pred: torch.Tensor
-    ) -> Dict[str, torch.Tensor]:
-        colwise_mse = torch.mean(torch.square(y_true - y_pred), dim=0)
-        loss_dict = {}
-        loss_dict["content"] = torch.sqrt(colwise_mse[0])
-        loss_dict["wording"] = torch.sqrt(colwise_mse[1])
-        loss_dict["total"] = torch.mean(torch.sqrt(colwise_mse), dim=0)
-        return loss_dict
-
-
-class CommonLitDataset(Dataset):
-    def __init__(
-        self,
-        data: pd.DataFrame,
-        model_name: str,
-        targets: List[str] = ["content", "wording"],
-        max_len: int = 512,
-        is_train: bool = True,
-    ) -> None:
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.input_texts = (
-            data["text"]
-            # + f" {self.tokenizer.sep_token} "
-            # + data["prompt_question"]
-        ).tolist()
-        self.input_prompt_texts = (
-            data["prompt_question"]
-            + f" {self.tokenizer.sep_token} "
-            + data["prompt_title"]
-            + f" {self.tokenizer.sep_token} "
-            + data["prompt_text"]
-        ).tolist()
-        self.prompt_q = data["prompt_question"].tolist()
-        self.max_len = max_len
-
-        if is_train:
-            self.targets = torch.from_numpy(data[targets].to_numpy())
-        else:
-            self.targets = torch.zeros((len(data), len(targets)))
-
-    def __len__(self) -> int:
-        return len(self.input_texts)
-
-    def __getitem__(
-        self, index: int
-    ) -> Tuple[Dict[str, torch.Tensor], torch.Tensor]:
-        text = self.input_texts[index]
-        promtp_text = self.input_prompt_texts[index]
-
-        inputs = {}
-        encoded_token = self.tokenizer(
-            text,
-            padding="max_length",
-            max_length=self.max_len,
-            truncation=True,
-            return_tensors="pt",
-        )
-        inputs["input_ids"] = encoded_token[
-            "input_ids"
-        ].squeeze()  # type: ignore
-        inputs["attention_mask"] = encoded_token[
-            "attention_mask"
-        ].squeeze()  # type: ignore
-        encoded_token = self.tokenizer(
-            promtp_text,
-            padding="max_length",
-            max_length=self.max_len,
-            truncation=True,
-            return_tensors="pt",
-        )
-        inputs["input_ids_p"] = encoded_token[
-            "input_ids"
-        ].squeeze()  # type: ignore
-        inputs["attention_mask_p"] = encoded_token[
-            "attention_mask"
-        ].squeeze()  # type: ignore
-
-        targets = self.targets[index, :]
-
-        return (inputs, targets)
+from .dataset import CommonLitDataset
+from .metrics import MCRMSELoss
 
 
 class MeanPooling(nn.Module):
@@ -131,11 +47,8 @@ class CommonLitModel(nn.Module):
         self.model = AutoModel.from_pretrained(model_name, config=self.config)
         self.pooler = MeanPooling()
 
-        self.model_p = AutoModel.from_pretrained(model_name)
-        self.pooler_p = MeanPooling()
-
         self.head = nn.Sequential(
-            nn.Linear(self.config.hidden_size * 2, self.num_labels),
+            nn.Linear(self.config.hidden_size, self.num_labels),
         )
 
         self.init_model()
@@ -149,16 +62,6 @@ class CommonLitModel(nn.Module):
             attention_mask=attention_mask,
         )
         output = self.pooler(output.last_hidden_state, attention_mask)
-
-        output_p = self.model_p(
-            input_ids=batch["input_ids_p"],
-            attention_mask=batch["attention_mask_p"],
-        )
-        output_p = self.pooler_p(
-            output_p.last_hidden_state, batch["attention_mask_p"]
-        )
-
-        output = torch.cat([output, output_p], dim=1)
         output = self.head(output)
         return output
 
@@ -183,31 +86,3 @@ class CommonLitModel(nn.Module):
                         module.weight.data[module.padding_idx].zero_()
                 elif isinstance(module, nn.LayerNorm):
                     module.bias.data.zero_()
-                    module.weight.data.fill_(1.0)
-
-        for _, param in self.model_p.encoder.layer.named_parameters():
-            param.requires_grad = False
-
-
-def main() -> None:
-    data = pd.read_csv("./data/preprocessed/train.csv")
-
-    model_name = "microsoft/deberta-v3-base"
-    dataset = CommonLitDataset(data, model_name)
-    model = CommonLitModel(model_name, num_labels=2)
-
-    dataloader = DataLoader(
-        dataset, batch_size=16, shuffle=False, num_workers=8
-    )
-    inputs, targets = next(iter(dataloader))
-    print(inputs)
-    z = model(inputs)
-    print(z)
-
-    loss_fn = MCRMSELoss()
-    loss = loss_fn(z, targets)
-    print(loss)
-
-
-if __name__ == "__main__":
-    main()
