@@ -48,7 +48,7 @@ def get_optimizer(model: nn.Module):
     optimizer_grouped_parameters = [
         {
             "params": [p for n, p in model.named_parameters() if "head" in n],
-            "weight_decay": 0.01,
+            "weight_decay": 0.0,
             "lr": 3e-4,
         }
     ]
@@ -103,6 +103,7 @@ def main(cfg: DictConfig) -> None:
 
     for fold in range(cfg.n_splits):
         print(f"Fold: {fold}")
+
         model = CommonLitModel(model_name, num_labels=2)
         train_dataset = CommonLitDataset(
             data.query(f"fold!={fold}"), model_name, max_len=512
@@ -111,10 +112,10 @@ def main(cfg: DictConfig) -> None:
             data.query(f"fold=={fold}"), model_name, max_len=512
         )
         train_dataloader = DataLoader(
-            train_dataset, batch_size=12, shuffle=True, drop_last=True
+            train_dataset, batch_size=4, shuffle=True, drop_last=True
         )
         valid_dataloader = DataLoader(
-            valid_dataset, batch_size=12, shuffle=False
+            valid_dataset, batch_size=4, shuffle=False
         )
         optimizer = get_optimizer(model)
 
@@ -127,6 +128,13 @@ def main(cfg: DictConfig) -> None:
             valid_dataloader=valid_dataloader,
             optimizer=optimizer,
         )
+
+        # if fold != 5:
+        #     # trainer.model.load_state_dict(
+        #     # torch.load(str(model_dir / f"fold{fold}/best_model.pth"))
+        #     # )
+        #     pass
+        # else:
         trainer.train(
             max_epochs=4,
             save_interval="batch",

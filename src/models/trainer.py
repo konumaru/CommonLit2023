@@ -40,6 +40,8 @@ class PytorchTrainer:
         self.work_dir.mkdir(parents=True, exist_ok=True)
         self.logger = self._get_logger()
 
+        self.train_log = {}
+
     def _get_logger(self) -> logging.Logger:
         log_filepath = self.work_dir / "train.log"
 
@@ -74,7 +76,7 @@ class PytorchTrainer:
         targets_all = torch.cat(targets, dim=0)
         # TODO: 複数のmetricを辞書型で保存して、train関数内でmetricに応じたbest scoreを保存する。
         score = self.eval_metric(preds_all, targets_all)
-        return score.item()
+        return score["total"].item()
 
     def train_batch(
         self, batch: Tuple[Dict[str, torch.Tensor], torch.Tensor]
@@ -86,9 +88,12 @@ class PytorchTrainer:
         self.optimizer.zero_grad()
         outputs = self.model(inputs)
         loss = self.criterion(outputs, targets)
-        loss.backward()
+        loss["total"].backward()
+        self.train_log["loss"] = loss["total"].item()
+        self.train_log["content_loss"] = loss["content"].item()
+        self.train_log["wording_loss"] = loss["wording"].item()
         self.optimizer.step()
-        return loss.item()
+        return loss["total"].item()
 
     def train(
         self,
@@ -138,6 +143,7 @@ class PytorchTrainer:
                         "eval_score": round(eval_score, 4),  # type: ignore
                         "best_score": round(best_eval_score, 4),
                     }
+                    lognameValues.update(self.train_log)
                     progress_bar.set_postfix(lognameValues)
 
                     message = " | ".join(

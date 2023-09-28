@@ -9,6 +9,9 @@ from lightgbm import LGBMRegressor
 from omegaconf import DictConfig, OmegaConf
 from sentence_transformers import SentenceTransformer
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVR
 from xgboost import XGBRegressor
 
 from feature import CommonLitFeature
@@ -27,9 +30,21 @@ def fit_rf(
     model = RandomForestRegressor(**params)
     model.set_params(random_state=seed)
     model.fit(X_train, y_train)
-    save_pickle(
-        str(pathlib.Path(save_filepath) / f"{save_filepath}.pkl"), model
-    )
+    save_pickle(str(f"{save_filepath}.pkl"), model)
+    return model
+
+
+def fit_svm(
+    params,
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    save_filepath: str,
+    seed: int = 42,
+) -> SVR:
+    model = make_pipeline(StandardScaler(), SVR(**params))
+    model = SVR(**params)
+    model.fit(X_train, y_train)
+    save_pickle(str(f"{save_filepath}.pkl"), model)
     return model
 
 
@@ -92,6 +107,7 @@ def get_first_stage_oof(cfg: DictConfig) -> np.ndarray:
     preds = []
     for filepath in filepaths:
         oof = pd.read_csv(str(external_output_dir / filepath))
+
         pred = oof[["pred_content", "pred_wording"]].to_numpy()
         preds.append(pred)
     return np.concatenate(preds, axis=1)
@@ -160,6 +176,14 @@ def train(cfg: DictConfig) -> None:
                     y_train,
                     X_valid,
                     y_valid,
+                    str(model_dir / saved_filename),
+                )
+                oof[folds == fold, i] = model.predict(X_valid)
+            elif cfg.model.name == "svm":
+                model = fit_svm(
+                    cfg.model.params,
+                    X_train,
+                    y_train,
                     str(model_dir / saved_filename),
                 )
                 oof[folds == fold, i] = model.predict(X_valid)

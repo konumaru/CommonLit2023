@@ -12,11 +12,16 @@ from utils import timer
 
 def download_gensim_model(cfg: DictConfig) -> None:
     output_dir = pathlib.Path(cfg.path.preprocessed)
-    model_name = "fasttext-wiki-news-subwords-300"
-    gensim.downloader.load(model_name)
+    model_names = [
+        "fasttext-wiki-news-subwords-300",
+        "glove-wiki-gigaword-300",
+    ]
 
-    vectors = gensim.downloader.load(model_name)
-    vectors.save(output_dir / "fasttext-wiki-news-subwords-300.vectors")  # type: ignore
+    for model_name in model_names:
+        gensim.downloader.load(model_name)
+
+        vectors = gensim.downloader.load(model_name)
+        vectors.save(str(output_dir / f"{model_name}"))  # type: ignore
 
 
 @hydra.main(

@@ -59,6 +59,7 @@
 | 16 | 0.5157331434893387 | 0.467 | refactoring create feature process |
 | 17 | 0.5114196777076987 | 0.470 | add feature of wv simirality of prompt text and text |
 | 18 | 0.5097619287866334 | - | add feature of some text stats |
+| 19 | 0.509488368861999 | - | add feature of glove vec simirality |
 
 ## Not worked for me
 
@@ -66,12 +67,9 @@
   - inputs: prompt_question, text
 - text averaged word2vec
 - average and median of word length
+- text length per sentence
 
 ## Feature works
 
-- ensemble
-  - svm
-- feature
-  - other word embedding simirality
-    - <https://www.kaggle.com/code/dlaststark/common-lit-no-transformers-neural-nets>
-  - text stats featureのstndard scaling
+- add feature to deberta, prompt question embedding
+  - not as a inpuids seq, use sentence transformer

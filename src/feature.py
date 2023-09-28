@@ -270,13 +270,8 @@ class CommonLitFeature(BaseFeature):
         return results.reshape(-1, 1)
 
     # TODO: refactor
-    @BaseFeature.cache(False)
+    @BaseFeature.cache()
     def text_wv(self) -> np.ndarray:
-        filepath = (
-            self.preprocess_dir / "fasttext-wiki-news-subwords-300.vectors"
-        )
-        wv = KeyedVectors.load(str(filepath), mmap="r")
-
         def get_words_avg_vec(words: List[str]) -> List[float]:
             vec = []
             for w in words:
@@ -286,28 +281,39 @@ class CommonLitFeature(BaseFeature):
                     pass
             return list(np.mean(vec, axis=0))
 
-        text_words = self.data["text"].apply(clean_text).str.split(" ")
-        text_wv = np.array([get_words_avg_vec(w) for w in text_words])
+        filepaths = (
+            self.preprocess_dir / "fasttext-wiki-news-subwords-300.npy",
+            self.preprocess_dir / "glove-wiki-gigaword-300.npy",
+        )
 
-        prompt_ids = self.data["prompt_id"].unique()
-        results = np.zeros(self.data.shape[0])
-        for prompt_id in prompt_ids:
-            is_this_prompt = self.data["prompt_id"] == prompt_id
-            p_text = (
-                self.data.loc[is_this_prompt, "prompt_text"]
-                .unique()
-                .tolist()[0]
-            )
-            p_text_words = clean_text(p_text).split(" ")
-            p_text_wv = np.array(get_words_avg_vec(p_text_words)).reshape(
-                1, -1
-            )
+        tmp = []
+        for filepath in filepaths:
+            wv = KeyedVectors.load(str(filepath), mmap="r")
 
-            results[is_this_prompt] = cosine_similarity(
-                p_text_wv, text_wv[is_this_prompt]
-            ).ravel()
+            text_words = self.data["text"].apply(clean_text).str.split(" ")
+            text_wv = np.array([get_words_avg_vec(w) for w in text_words])
 
-        return results.reshape(-1, 1)
+            prompt_ids = self.data["prompt_id"].unique()
+            results = np.zeros(self.data.shape[0])
+            for prompt_id in prompt_ids:
+                is_this_prompt = self.data["prompt_id"] == prompt_id
+                p_text = (
+                    self.data.loc[is_this_prompt, "prompt_text"]
+                    .unique()
+                    .tolist()[0]
+                )
+                p_text_words = clean_text(p_text).split(" ")
+                p_text_wv = np.array(get_words_avg_vec(p_text_words)).reshape(
+                    1, -1
+                )
+
+                results[is_this_prompt] = cosine_similarity(
+                    p_text_wv, text_wv[is_this_prompt]
+                ).ravel()
+
+            tmp.append(results.reshape(-1, 1))
+
+        return np.concatenate(tmp, axis=1)
 
 
 def create_target_encoding_map(cfg: DictConfig, data: pd.DataFrame) -> None:
